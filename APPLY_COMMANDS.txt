@@ -1,0 +1,19 @@
+KHERT PORTFOLIO — GOOGLE DRIVE AUTO-SYNC PATCH
+
+This patch changes Recent Clinical Studies from Supabase rows to a live public Google Drive folder listing.
+
+The configured folder URL is:
+https://drive.google.com/drive/folders/1-F8FDpiTbceiB1c1lWU2F9-LPZiGaa7U?usp=sharing
+
+Copy this patch over the root of your portfolio project, preserving the folders.
+Then configure GOOGLE_DRIVE_FOLDER_URL and GOOGLE_DRIVE_API_KEY in Vercel.
+
+The website calls /api/studies. Vercel runs api/studies.ts server-side.
+Google Drive results are cached at the Vercel CDN for 30 seconds.
+No SQL seed is required for study listing anymore.
+
+Optional Drive description metadata:
+Category: Pediatrics
+Summary: A short description shown on the portfolio card.
+
+If those lines are absent, the title is derived from the filename and category is inferred conservatively.
