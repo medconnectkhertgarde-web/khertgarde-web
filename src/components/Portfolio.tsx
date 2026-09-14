@@ -1,13 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowDown, Mail, Menu, Moon, Phone, Sun, X } from "lucide-react";
 
 import { ClinicalStudies } from "@/components/ClinicalStudies";
+import { Comments } from "@/components/Comments";
+import {
+  DEFAULT_EXPERIENCES,
+  DEFAULT_PORTFOLIO_SETTINGS,
+  fetchPortfolioExperiences,
+  fetchPortfolioSettings,
+  normalizePhoneHref,
+  type PortfolioExperience,
+  type PortfolioSettings,
+} from "@/lib/portfolio-content";
 
 const navItems = [
   ["About", "about"],
   ["Experience", "experience"],
   ["Clinical studies", "clinical-studies"],
   ["Contact", "contact"],
+  ["Comments", "comments"],
 ] as const;
 
 function ThemeToggle() {
@@ -32,14 +43,14 @@ function ThemeToggle() {
   );
 }
 
-function Header() {
+function Header({ displayName }: { displayName: string }) {
   const [open, setOpen] = useState(false);
 
   return (
     <header className="site-header">
       <div className="header-inner">
         <a href="#top" className="brand">
-          Khert Laguna Garde
+          {displayName}
         </a>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
@@ -79,9 +90,13 @@ function Header() {
   );
 }
 
-
-function ProfilePhoto() {
+function ProfilePhoto({ name, src }: { name: string; src: string | null }) {
   const [missing, setMissing] = useState(false);
+  const imageSource = src || "/profile.jpg";
+
+  useEffect(() => {
+    setMissing(false);
+  }, [imageSource]);
 
   if (missing) {
     return (
@@ -93,36 +108,27 @@ function ProfilePhoto() {
 
   return (
     <div className="profile-placeholder profile-photo-shell">
-      <img
-        src="/profile.jpg"
-        alt="Khert Laguna Garde"
-        loading="lazy"
-        onError={() => setMissing(true)}
-      />
+      <img src={imageSource} alt={name} loading="lazy" onError={() => setMissing(true)} />
     </div>
   );
 }
 
-function Hero() {
+function Hero({ settings }: { settings: PortfolioSettings }) {
   return (
     <section id="top" className="hero">
       <div className="hero-grid">
         <div>
-          <p className="eyebrow">Independent researcher · Philippines</p>
-          <h1>Khert Laguna Garde</h1>
+          <p className="eyebrow">{settings.eyebrow}</p>
+          <h1>{settings.display_name}</h1>
           <div className="hero-role">
-            <span>Independent Researcher</span>
+            <span>{settings.role_primary}</span>
             <span aria-hidden="true">/</span>
-            <span>Medicine · Clinical Studies</span>
+            <span>{settings.role_secondary}</span>
           </div>
-          <p className="hero-copy">
-            Independent researcher with a strong interest in medicine and clinical studies. I explore
-            medical conditions, diagnostic approaches, disease mechanisms, treatment principles, and
-            clinical scenarios through structured independent research and study.
-          </p>
+          <p className="hero-copy">{settings.hero_copy}</p>
         </div>
 
-        <ProfilePhoto />
+        <ProfilePhoto name={settings.display_name} src={settings.profile_image_url} />
       </div>
 
       <a href="#about" className="continue-link">
@@ -140,44 +146,21 @@ function SectionHeading({ number, children, id }: { number: string; children: st
   );
 }
 
-function About() {
+function About({ settings }: { settings: PortfolioSettings }) {
   return (
     <section id="about" className="section split-section" aria-labelledby="about-heading">
       <SectionHeading number="01" id="about-heading">
         About
       </SectionHeading>
       <div className="body-copy">
-        <p>
-          I’m an independent researcher with a growing focus on medicine and clinical studies. My work
-          centers on understanding diseases, clinical presentation, diagnostic reasoning, treatment
-          principles, and evidence-based approaches to patient scenarios.
-        </p>
-        <p>
-          I enjoy turning complex medical topics into structured and understandable study materials while
-          continuously expanding my knowledge across different areas of medicine.
-        </p>
+        <p>{settings.about_primary}</p>
+        {settings.about_secondary.trim() ? <p>{settings.about_secondary}</p> : null}
       </div>
     </section>
   );
 }
 
-const experiences = [
-  {
-    company: "Concentrix",
-    role: "Customer Service Representative",
-    description:
-      "Handled customer inquiries and service concerns while providing clear, professional, and timely support. The role involved understanding customer needs, explaining information accurately, resolving concerns when possible, documenting interactions, following account procedures, and escalating complex issues when necessary.",
-    note: "A Customer Service Representative serves as a primary point of contact between a company and its customers, helping answer questions, resolve concerns, provide information, and maintain a positive customer experience.",
-  },
-  {
-    company: "Sutherland Global Services",
-    role: "Business Process Outsourcing — Healthcare Account",
-    description:
-      "Worked within a healthcare-focused BPO account supporting account operations and customer interactions according to established company and account procedures.",
-  },
-];
-
-function Experience() {
+function Experience({ experiences }: { experiences: PortfolioExperience[] }) {
   return (
     <section id="experience" className="section" aria-labelledby="experience-heading">
       <SectionHeading number="02" id="experience-heading">
@@ -186,15 +169,15 @@ function Experience() {
 
       <div className="experience-list">
         {experiences.map((item, index) => (
-          <article key={item.company} className="experience-item">
-            <span className="experience-number">0{index + 1}</span>
+          <article key={item.id} className="experience-item">
+            <span className="experience-number">{String(index + 1).padStart(2, "0")}</span>
             <div>
               <h3>{item.company}</h3>
               <p className="experience-role">{item.role}</p>
             </div>
             <div className="experience-description">
               <p>{item.description}</p>
-              {item.note ? <p className="experience-note">{item.note}</p> : null}
+              {item.note?.trim() ? <p className="experience-note">{item.note}</p> : null}
             </div>
           </article>
         ))}
@@ -203,7 +186,9 @@ function Experience() {
   );
 }
 
-function Contact() {
+function Contact({ settings }: { settings: PortfolioSettings }) {
+  const phoneHref = normalizePhoneHref(settings.contact_phone_href || settings.contact_phone);
+
   return (
     <section id="contact" className="section split-section contact-section" aria-labelledby="contact-heading">
       <SectionHeading number="04" id="contact-heading">
@@ -211,50 +196,77 @@ function Contact() {
       </SectionHeading>
 
       <div>
-        <p className="contact-intro">
-          For research-related inquiries, professional opportunities, and other communications.
-        </p>
+        <p className="contact-intro">{settings.contact_intro}</p>
 
         <div className="contact-list">
-          <a href="mailto:medconnect.khertgarde@gmail.com" className="contact-link">
-            <span className="contact-label">Email</span>
-            <span className="contact-value">medconnect.khertgarde@gmail.com</span>
-            <Mail aria-hidden="true" />
-          </a>
-          <a href="tel:+639307732588" className="contact-link">
-            <span className="contact-label">Phone</span>
-            <span className="contact-value">09307732588</span>
-            <Phone aria-hidden="true" />
-          </a>
+          {settings.contact_email.trim() ? (
+            <a href={`mailto:${settings.contact_email.trim()}`} className="contact-link">
+              <span className="contact-label">Email</span>
+              <span className="contact-value">{settings.contact_email}</span>
+              <Mail aria-hidden="true" />
+            </a>
+          ) : null}
+
+          {settings.contact_phone.trim() ? (
+            <a href={`tel:${phoneHref}`} className="contact-link">
+              <span className="contact-label">Phone</span>
+              <span className="contact-value">{settings.contact_phone}</span>
+              <Phone aria-hidden="true" />
+            </a>
+          ) : null}
         </div>
       </div>
     </section>
   );
 }
 
-function Footer() {
+function Footer({ settings }: { settings: PortfolioSettings }) {
   return (
     <footer className="footer">
       <div>
-        <p className="footer-name">Khert Laguna Garde</p>
-        <p>Independent Researcher</p>
+        <p className="footer-name">{settings.display_name}</p>
+        <p>{settings.role_primary}</p>
       </div>
-      <p className="footer-copyright">© {new Date().getFullYear()} Khert Laguna Garde</p>
+      <p className="footer-copyright">© {new Date().getFullYear()} {settings.display_name}</p>
     </footer>
   );
 }
 
 export function Portfolio() {
+  const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
+  const [experiences, setExperiences] = useState<PortfolioExperience[]>(DEFAULT_EXPERIENCES);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([fetchPortfolioSettings(), fetchPortfolioExperiences()]).then(
+      ([nextSettings, nextExperiences]) => {
+        if (cancelled) return;
+        setSettings(nextSettings);
+        setExperiences(nextExperiences);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    document.title = `${settings.display_name} — ${settings.role_primary}`;
+  }, [settings.display_name, settings.role_primary]);
+
   return (
     <>
-      <Header />
+      <Header displayName={settings.display_name} />
       <main className="page-shell">
-        <Hero />
-        <About />
-        <Experience />
+        <Hero settings={settings} />
+        <About settings={settings} />
+        <Experience experiences={experiences} />
         <ClinicalStudies />
-        <Contact />
-        <Footer />
+        <Contact settings={settings} />
+        <Comments />
+        <Footer settings={settings} />
       </main>
     </>
   );

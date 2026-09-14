@@ -1,0 +1,1036 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
+import {
+  ArrowLeft,
+  ImagePlus,
+  KeyRound,
+  LoaderCircle,
+  LogIn,
+  LogOut,
+  Moon,
+  Plus,
+  Save,
+  Sun,
+  Trash2,
+} from "lucide-react";
+import type { Session, User } from "@supabase/supabase-js";
+
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
+import {
+  DEFAULT_PORTFOLIO_SETTINGS,
+  fetchPortfolioExperiences,
+  fetchPortfolioSettings,
+  type PortfolioExperience,
+  type PortfolioSettings,
+} from "@/lib/portfolio-content";
+import "@/admin.css";
+
+const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
+const PROFILE_BUCKET = "portfolio-assets";
+const PROFILE_OBJECT = "profile/current";
+const MAX_PROFILE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_PROFILE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+interface AdminComment {
+  id: number | string;
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+
+function isAdminUser(user: User | null) {
+  return user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
+}
+
+function hasPasswordAuthentication(session: Session | null) {
+  const token = session?.access_token;
+  if (!token) return false;
+
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return false;
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const claims = JSON.parse(window.atob(padded)) as {
+      amr?: Array<{ method?: string } | string>;
+    };
+
+    return (
+      Array.isArray(claims.amr) &&
+      claims.amr.some((item) =>
+        typeof item === "string" ? item === "password" : item.method === "password",
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function AdminThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  function toggle() {
+    const nextDark = !dark;
+    setDark(nextDark);
+    document.documentElement.classList.toggle("dark", nextDark);
+    window.localStorage.setItem("khert-theme", nextDark ? "dark" : "light");
+  }
+
+  return (
+    <button className="icon-button" type="button" onClick={toggle} aria-label="Toggle color theme">
+      {dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+    </button>
+  );
+}
+
+export function AdminPanel() {
+  const supabase = getSupabaseClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
+  const [experiences, setExperiences] = useState<PortfolioExperience[]>([]);
+  const [comments, setComments] = useState<AdminComment[]>([]);
+  const [panelBusy, setPanelBusy] = useState(false);
+  const [panelMessage, setPanelMessage] = useState<string | null>(null);
+
+  const [newExperience, setNewExperience] = useState({
+    company: "",
+    role: "",
+    description: "",
+    note: "",
+  });
+
+  const adminEmailMatch = isAdminUser(user);
+  const passwordSession = hasPasswordAuthentication(session);
+  const admin = adminEmailMatch && passwordSession;
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
+      setAuthReady(true);
+    });
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+      setAuthReady(true);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  const loadAdminData = useCallback(async () => {
+    if (!supabase || !admin) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const [nextSettings, nextExperiences, commentsResult] = await Promise.all([
+      fetchPortfolioSettings(),
+      fetchPortfolioExperiences(),
+      supabase
+        .from("portfolio_comments")
+        .select("id, author_name, body, created_at")
+        .order("created_at", { ascending: false })
+        .limit(100),
+    ]);
+
+    setSettings(nextSettings);
+    setExperiences(nextExperiences.filter((item) => !item.id.startsWith("default-")));
+
+    if (commentsResult.error) {
+      setPanelMessage("Portfolio content loaded, but comments could not be loaded.");
+    } else {
+      setComments((commentsResult.data ?? []) as AdminComment[]);
+    }
+
+    setPanelBusy(false);
+  }, [admin, supabase]);
+
+  useEffect(() => {
+    if (admin) {
+      void loadAdminData();
+    }
+  }, [admin, loadAdminData]);
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || authBusy || !password) return;
+
+    setAuthBusy(true);
+    setAuthMessage(null);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: ADMIN_EMAIL,
+      password,
+    });
+
+    if (error) {
+      setAuthMessage("Admin sign-in failed. Check the password or reset it.");
+    } else if (!isAdminUser(data.user)) {
+      await supabase.auth.signOut();
+      setAuthMessage("This account is not authorized for the portfolio admin panel.");
+    } else {
+      setPassword("");
+    }
+
+    setAuthBusy(false);
+  }
+
+  async function bootstrapWithGoogle() {
+    if (!supabase || authBusy) return;
+
+    setAuthBusy(true);
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/admin`,
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (error) {
+      setAuthMessage("Google sign-in could not be started.");
+      setAuthBusy(false);
+    }
+  }
+
+  async function requestPasswordReset() {
+    if (!supabase || authBusy) return;
+
+    setAuthBusy(true);
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(ADMIN_EMAIL, {
+      redirectTo: `${window.location.origin}/admin`,
+    });
+
+    setAuthMessage(
+      error
+        ? "The password reset email could not be requested."
+        : "If the admin account exists, a password reset link has been sent.",
+    );
+    setAuthBusy(false);
+  }
+
+  async function updatePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !adminEmailMatch || authBusy) return;
+
+    if (newPassword.length < 8) {
+      setAuthMessage("Use a password with at least 8 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setAuthMessage("The new passwords do not match.");
+      return;
+    }
+
+    setAuthBusy(true);
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      setAuthMessage("The password could not be updated.");
+    } else {
+      setNewPassword("");
+      setConfirmPassword("");
+      setRecoveryMode(false);
+
+      if (!passwordSession) {
+        await supabase.auth.signOut();
+        setAuthMessage("Admin password set. Sign in again using the password to enter the admin panel.");
+      } else {
+        setAuthMessage("Admin password updated.");
+      }
+    }
+
+    setAuthBusy(false);
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    setAuthBusy(true);
+    await supabase.auth.signOut();
+    setAuthBusy(false);
+    setPanelMessage(null);
+  }
+
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !admin || panelBusy) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const payload = {
+      display_name: settings.display_name.trim(),
+      eyebrow: settings.eyebrow.trim(),
+      role_primary: settings.role_primary.trim(),
+      role_secondary: settings.role_secondary.trim(),
+      hero_copy: settings.hero_copy.trim(),
+      about_primary: settings.about_primary.trim(),
+      about_secondary: settings.about_secondary.trim(),
+      contact_intro: settings.contact_intro.trim(),
+      contact_email: settings.contact_email.trim(),
+      contact_phone: settings.contact_phone.trim(),
+      contact_phone_href: settings.contact_phone_href.trim(),
+      profile_image_url: settings.profile_image_url,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("portfolio_settings").update(payload).eq("id", 1);
+
+    setPanelMessage(error ? "Portfolio details could not be saved." : "Portfolio details saved.");
+    setPanelBusy(false);
+  }
+
+  function updateExperienceLocal<K extends keyof PortfolioExperience>(
+    id: string,
+    field: K,
+    value: PortfolioExperience[K],
+  ) {
+    setExperiences((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  }
+
+  async function saveExperience(item: PortfolioExperience) {
+    if (!supabase || !admin || panelBusy) return;
+
+    if (!item.company.trim() || !item.role.trim() || !item.description.trim()) {
+      setPanelMessage("Company, role, and description are required.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase
+      .from("portfolio_experiences")
+      .update({
+        company: item.company.trim(),
+        role: item.role.trim(),
+        description: item.description.trim(),
+        note: item.note?.trim() || null,
+        sort_order: Number(item.sort_order) || 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", item.id);
+
+    setPanelMessage(error ? "Experience could not be updated." : "Experience updated.");
+    setPanelBusy(false);
+  }
+
+  async function addExperience(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !admin || panelBusy) return;
+
+    if (
+      !newExperience.company.trim() ||
+      !newExperience.role.trim() ||
+      !newExperience.description.trim()
+    ) {
+      setPanelMessage("Company, role, and description are required.");
+      return;
+    }
+
+    const nextOrder =
+      experiences.reduce((highest, item) => Math.max(highest, Number(item.sort_order) || 0), 0) + 10;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { data, error } = await supabase
+      .from("portfolio_experiences")
+      .insert({
+        company: newExperience.company.trim(),
+        role: newExperience.role.trim(),
+        description: newExperience.description.trim(),
+        note: newExperience.note.trim() || null,
+        sort_order: nextOrder,
+      })
+      .select("id, company, role, description, note, sort_order")
+      .single();
+
+    if (error) {
+      setPanelMessage("Experience could not be added.");
+    } else {
+      setExperiences((items) => [...items, data as PortfolioExperience]);
+      setNewExperience({ company: "", role: "", description: "", note: "" });
+      setPanelMessage("Experience added.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function deleteExperience(id: string) {
+    if (!supabase || !admin || panelBusy) return;
+    if (!window.confirm("Delete this work experience?")) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase.from("portfolio_experiences").delete().eq("id", id);
+
+    if (error) {
+      setPanelMessage("Experience could not be deleted.");
+    } else {
+      setExperiences((items) => items.filter((item) => item.id !== id));
+      setPanelMessage("Experience deleted.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function deleteComment(id: number | string) {
+    if (!supabase || !admin || panelBusy) return;
+    if (!window.confirm("Delete this visitor comment?")) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase.from("portfolio_comments").delete().eq("id", id);
+
+    if (error) {
+      setPanelMessage("Comment could not be deleted.");
+    } else {
+      setComments((items) => items.filter((item) => item.id !== id));
+      setPanelMessage("Comment deleted.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function uploadProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !supabase || !admin || panelBusy) return;
+
+    if (!ACCEPTED_PROFILE_TYPES.has(file.type)) {
+      setPanelMessage("Use a JPG, PNG, or WebP profile image.");
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_BYTES) {
+      setPanelMessage("Profile images are limited to 2 MB.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error: uploadError } = await supabase.storage.from(PROFILE_BUCKET).upload(PROFILE_OBJECT, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: true,
+    });
+
+    if (uploadError) {
+      setPanelMessage("The profile image could not be uploaded.");
+      setPanelBusy(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from(PROFILE_BUCKET).getPublicUrl(PROFILE_OBJECT);
+    const versionedUrl = `${data.publicUrl}?v=${Date.now()}`;
+
+    const { error: updateError } = await supabase
+      .from("portfolio_settings")
+      .update({
+        profile_image_url: versionedUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+
+    if (updateError) {
+      setPanelMessage("The image uploaded, but the portfolio photo could not be updated.");
+    } else {
+      setSettings((current) => ({ ...current, profile_image_url: versionedUrl }));
+      setPanelMessage("Profile image updated.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function useBundledPhoto() {
+    if (!supabase || !admin || panelBusy) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase
+      .from("portfolio_settings")
+      .update({
+        profile_image_url: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+
+    if (error) {
+      setPanelMessage("The profile image could not be reset.");
+    } else {
+      setSettings((current) => ({ ...current, profile_image_url: null }));
+      setPanelMessage("The bundled profile image is active.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  const previewPhoto = settings.profile_image_url || "/profile.jpg";
+  const sortedExperiences = useMemo(
+    () => [...experiences].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)),
+    [experiences],
+  );
+
+  if (!isSupabaseConfigured || !supabase) {
+    return (
+      <main className="admin-shell">
+        <a className="admin-back-link" href="/">
+          <ArrowLeft aria-hidden="true" /> Portfolio
+        </a>
+        <div className="admin-state">Supabase is not configured for the admin panel.</div>
+      </main>
+    );
+  }
+
+  if (!authReady) {
+    return (
+      <main className="admin-shell">
+        <div className="admin-state">
+          <LoaderCircle className="spin" aria-hidden="true" />
+          Loading admin session
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="admin-shell admin-auth-shell">
+        <div className="admin-auth-card">
+          <div className="admin-auth-topline">
+            <a className="admin-back-link" href="/">
+              <ArrowLeft aria-hidden="true" /> Portfolio
+            </a>
+            <AdminThemeToggle />
+          </div>
+
+          <p className="admin-kicker">Portfolio administration</p>
+          <h1>Admin panel</h1>
+          <p className="admin-auth-copy">
+            Sign in with the authorized administrator account to manage public portfolio content.
+          </p>
+
+          <form className="admin-form" onSubmit={login}>
+            <label>
+              Admin email
+              <input type="email" value={ADMIN_EMAIL} readOnly autoComplete="username" />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="button button-primary" type="submit" disabled={authBusy || !password}>
+              {authBusy ? <LoaderCircle className="spin" aria-hidden="true" /> : <LogIn aria-hidden="true" />}
+              Sign in
+            </button>
+          </form>
+
+          <div className="admin-auth-actions">
+            <button className="admin-text-button" type="button" onClick={requestPasswordReset} disabled={authBusy}>
+              Forgot / reset password
+            </button>
+            <button className="admin-text-button" type="button" onClick={bootstrapWithGoogle} disabled={authBusy}>
+              Initialize with Google
+            </button>
+          </div>
+
+          {authMessage ? <p className="admin-message" role="status">{authMessage}</p> : null}
+        </div>
+      </main>
+    );
+  }
+
+  if (!adminEmailMatch) {
+    return (
+      <main className="admin-shell admin-auth-shell">
+        <div className="admin-auth-card">
+          <a className="admin-back-link" href="/">
+            <ArrowLeft aria-hidden="true" /> Portfolio
+          </a>
+          <p className="admin-kicker">Access denied</p>
+          <h1>Unauthorized account</h1>
+          <p className="admin-auth-copy">This signed-in account is not the portfolio administrator.</p>
+          <button className="button button-outline" type="button" onClick={signOut} disabled={authBusy}>
+            <LogOut aria-hidden="true" />
+            Sign out
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!passwordSession) {
+    return (
+      <main className="admin-shell admin-auth-shell">
+        <div className="admin-auth-card">
+          <div className="admin-auth-topline">
+            <a className="admin-back-link" href="/">
+              <ArrowLeft aria-hidden="true" /> Portfolio
+            </a>
+            <AdminThemeToggle />
+          </div>
+
+          <p className="admin-kicker">{recoveryMode ? "Password recovery" : "Admin initialization"}</p>
+          <h1>Set admin password</h1>
+          <p className="admin-auth-copy">
+            The correct administrator email is authenticated. Set a password, then sign in again with
+            email and password to unlock portfolio management.
+          </p>
+
+          <form className="admin-form admin-password-form" onSubmit={updatePassword}>
+            <label>
+              New password
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+            <button className="button button-primary" type="submit" disabled={authBusy || !newPassword}>
+              <KeyRound aria-hidden="true" />
+              Set admin password
+            </button>
+          </form>
+
+          <button className="admin-text-button admin-signout-link" type="button" onClick={signOut} disabled={authBusy}>
+            Sign out
+          </button>
+
+          {authMessage ? <p className="admin-message" role="status">{authMessage}</p> : null}
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="admin-shell">
+      <header className="admin-header">
+        <div>
+          <a className="admin-back-link" href="/">
+            <ArrowLeft aria-hidden="true" /> Portfolio
+          </a>
+          <p className="admin-kicker">Authenticated administration</p>
+          <h1>Portfolio admin</h1>
+          <p className="admin-header-copy">Edit only the content you need. Drive studies remain managed by Google Drive.</p>
+        </div>
+        <div className="admin-header-actions">
+          <AdminThemeToggle />
+          <button className="button button-outline" type="button" onClick={signOut} disabled={authBusy}>
+            <LogOut aria-hidden="true" />
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      {panelMessage ? <p className="admin-global-message" role="status">{panelMessage}</p> : null}
+      {panelBusy ? (
+        <div className="admin-progress" role="status">
+          <LoaderCircle className="spin" aria-hidden="true" /> Saving changes
+        </div>
+      ) : null}
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>01</span>
+            <h2>Portfolio details</h2>
+          </div>
+          <p>Name, introduction, about text, and contact details.</p>
+        </div>
+
+        <form className="admin-form admin-form-grid" onSubmit={saveSettings}>
+          <label>
+            Display name
+            <input
+              value={settings.display_name}
+              onChange={(event) => setSettings((current) => ({ ...current, display_name: event.target.value }))}
+              maxLength={100}
+              required
+            />
+          </label>
+          <label>
+            Eyebrow
+            <input
+              value={settings.eyebrow}
+              onChange={(event) => setSettings((current) => ({ ...current, eyebrow: event.target.value }))}
+              maxLength={160}
+            />
+          </label>
+          <label>
+            Primary role
+            <input
+              value={settings.role_primary}
+              onChange={(event) => setSettings((current) => ({ ...current, role_primary: event.target.value }))}
+              maxLength={100}
+              required
+            />
+          </label>
+          <label>
+            Secondary focus
+            <input
+              value={settings.role_secondary}
+              onChange={(event) => setSettings((current) => ({ ...current, role_secondary: event.target.value }))}
+              maxLength={120}
+            />
+          </label>
+
+          <label className="admin-field-wide">
+            Hero introduction
+            <textarea
+              value={settings.hero_copy}
+              onChange={(event) => setSettings((current) => ({ ...current, hero_copy: event.target.value }))}
+              rows={4}
+              maxLength={1200}
+              required
+            />
+          </label>
+
+          <label className="admin-field-wide">
+            About — paragraph 1
+            <textarea
+              value={settings.about_primary}
+              onChange={(event) => setSettings((current) => ({ ...current, about_primary: event.target.value }))}
+              rows={4}
+              maxLength={1600}
+              required
+            />
+          </label>
+
+          <label className="admin-field-wide">
+            About — paragraph 2
+            <textarea
+              value={settings.about_secondary}
+              onChange={(event) => setSettings((current) => ({ ...current, about_secondary: event.target.value }))}
+              rows={4}
+              maxLength={1600}
+            />
+          </label>
+
+          <label className="admin-field-wide">
+            Contact introduction
+            <textarea
+              value={settings.contact_intro}
+              onChange={(event) => setSettings((current) => ({ ...current, contact_intro: event.target.value }))}
+              rows={3}
+              maxLength={600}
+            />
+          </label>
+
+          <label>
+            Public email
+            <input
+              type="email"
+              value={settings.contact_email}
+              onChange={(event) => setSettings((current) => ({ ...current, contact_email: event.target.value }))}
+              maxLength={320}
+            />
+          </label>
+
+          <label>
+            Phone shown on portfolio
+            <input
+              value={settings.contact_phone}
+              onChange={(event) => setSettings((current) => ({ ...current, contact_phone: event.target.value }))}
+              maxLength={40}
+            />
+          </label>
+
+          <label className="admin-field-wide">
+            Phone dial value
+            <input
+              value={settings.contact_phone_href}
+              onChange={(event) => setSettings((current) => ({ ...current, contact_phone_href: event.target.value }))}
+              maxLength={40}
+              placeholder="+639307732588"
+            />
+          </label>
+
+          <div className="admin-form-actions admin-field-wide">
+            <button className="button button-primary" type="submit" disabled={panelBusy}>
+              <Save aria-hidden="true" /> Save portfolio details
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>02</span>
+            <h2>Profile photo</h2>
+          </div>
+          <p>JPG, PNG, or WebP. Maximum 2 MB.</p>
+        </div>
+
+        <div className="admin-photo-editor">
+          <img src={previewPhoto} alt="Current portfolio profile" />
+          <div>
+            <label className="button button-primary admin-upload-button">
+              <ImagePlus aria-hidden="true" />
+              Upload new photo
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadProfilePhoto} />
+            </label>
+            <button className="button button-outline" type="button" onClick={useBundledPhoto} disabled={panelBusy}>
+              Use bundled photo
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>03</span>
+            <h2>Work experience</h2>
+          </div>
+          <p>Add, edit, reorder numerically, or remove entries.</p>
+        </div>
+
+        <div className="admin-experience-list">
+          {sortedExperiences.map((item) => (
+            <article className="admin-experience-card" key={item.id}>
+              <div className="admin-form admin-form-grid">
+                <label>
+                  Company
+                  <input value={item.company} onChange={(event) => updateExperienceLocal(item.id, "company", event.target.value)} />
+                </label>
+                <label>
+                  Role
+                  <input value={item.role} onChange={(event) => updateExperienceLocal(item.id, "role", event.target.value)} />
+                </label>
+                <label className="admin-field-wide">
+                  Description
+                  <textarea
+                    value={item.description}
+                    onChange={(event) => updateExperienceLocal(item.id, "description", event.target.value)}
+                    rows={4}
+                    maxLength={1800}
+                  />
+                </label>
+                <label className="admin-field-wide">
+                  Additional note
+                  <textarea
+                    value={item.note ?? ""}
+                    onChange={(event) => updateExperienceLocal(item.id, "note", event.target.value)}
+                    rows={3}
+                    maxLength={1200}
+                  />
+                </label>
+                <label>
+                  Display order
+                  <input
+                    type="number"
+                    value={item.sort_order}
+                    onChange={(event) => updateExperienceLocal(item.id, "sort_order", Number(event.target.value))}
+                  />
+                </label>
+              </div>
+
+              <div className="admin-card-actions">
+                <button className="button button-primary" type="button" onClick={() => void saveExperience(item)} disabled={panelBusy}>
+                  <Save aria-hidden="true" /> Save
+                </button>
+                <button className="button button-outline admin-danger-button" type="button" onClick={() => void deleteExperience(item.id)} disabled={panelBusy}>
+                  <Trash2 aria-hidden="true" /> Delete
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <form className="admin-new-experience" onSubmit={addExperience}>
+          <h3>Add experience</h3>
+          <div className="admin-form admin-form-grid">
+            <label>
+              Company
+              <input
+                value={newExperience.company}
+                onChange={(event) => setNewExperience((current) => ({ ...current, company: event.target.value }))}
+                required
+              />
+            </label>
+            <label>
+              Role
+              <input
+                value={newExperience.role}
+                onChange={(event) => setNewExperience((current) => ({ ...current, role: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="admin-field-wide">
+              Description
+              <textarea
+                value={newExperience.description}
+                onChange={(event) => setNewExperience((current) => ({ ...current, description: event.target.value }))}
+                rows={4}
+                required
+              />
+            </label>
+            <label className="admin-field-wide">
+              Additional note
+              <textarea
+                value={newExperience.note}
+                onChange={(event) => setNewExperience((current) => ({ ...current, note: event.target.value }))}
+                rows={3}
+              />
+            </label>
+          </div>
+          <button className="button button-primary" type="submit" disabled={panelBusy}>
+            <Plus aria-hidden="true" /> Add experience
+          </button>
+        </form>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>04</span>
+            <h2>Visitor comments</h2>
+          </div>
+          <p>Newest active comments. Delete only when moderation is needed.</p>
+        </div>
+
+        <div className="admin-comment-list">
+          {comments.length ? (
+            comments.map((comment) => (
+              <article className="admin-comment-item" key={comment.id}>
+                <div>
+                  <div className="admin-comment-meta">
+                    <strong>{comment.author_name}</strong>
+                    <time dateTime={comment.created_at}>{formatDate(comment.created_at)}</time>
+                  </div>
+                  <p>{comment.body}</p>
+                </div>
+                <button
+                  className="icon-button admin-delete-icon"
+                  type="button"
+                  onClick={() => void deleteComment(comment.id)}
+                  disabled={panelBusy}
+                  aria-label={`Delete comment by ${comment.author_name}`}
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
+              </article>
+            ))
+          ) : (
+            <div className="admin-state">No active visitor comments.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>05</span>
+            <h2>Admin security</h2>
+          </div>
+          <p>Set or change the password attached to the authorized Supabase account.</p>
+        </div>
+
+        <form className="admin-form admin-password-form" onSubmit={updatePassword}>
+          <label>
+            New password
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
+          <label>
+            Confirm new password
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
+          <button className="button button-primary" type="submit" disabled={authBusy || !newPassword}>
+            <KeyRound aria-hidden="true" />
+            {recoveryMode ? "Set recovered password" : "Change password"}
+          </button>
+        </form>
+
+        {authMessage ? <p className="admin-message" role="status">{authMessage}</p> : null}
+      </section>
+    </main>
+  );
+}
