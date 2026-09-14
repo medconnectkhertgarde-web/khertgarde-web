@@ -15,5 +15,11 @@
         { "key": "X-Frame-Options", "value": "DENY" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/supabase-keepalive",
+      "schedule": "17 3 * * *"
+    }
   ]
 }
