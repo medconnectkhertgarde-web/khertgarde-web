@@ -3,6 +3,7 @@ import { ArrowDown, Mail, Menu, Moon, Phone, Sun, X } from "lucide-react";
 
 import { ClinicalStudies } from "@/components/ClinicalStudies";
 import { Comments } from "@/components/Comments";
+import { ProfileMusic } from "@/components/ProfileMusic";
 import {
   DEFAULT_EXPERIENCES,
   DEFAULT_PORTFOLIO_SETTINGS,
@@ -12,6 +13,7 @@ import {
   type PortfolioExperience,
   type PortfolioSettings,
 } from "@/lib/portfolio-content";
+import { fetchPortfolioMusicTracks, type PortfolioMusicTrack } from "@/lib/portfolio-music";
 
 const navItems = [
   ["About", "about"],
@@ -94,10 +96,12 @@ function ProfilePhoto({
   name,
   src,
   resolved,
+  musicTracks,
 }: {
   name: string;
   src: string | null;
   resolved: boolean;
+  musicTracks: PortfolioMusicTrack[];
 }) {
   const imageSource = resolved ? src || "/profile.jpg" : null;
   const [loadedSource, setLoadedSource] = useState<string | null>(null);
@@ -132,31 +136,42 @@ function ProfilePhoto({
   const failed = Boolean(imageSource && failedSource === imageSource);
 
   return (
-    <div className={`profile-frame${ready ? " is-ready" : " is-loading"}`}>
-      <div className="profile-frame-inner">
-        {ready && imageSource ? (
-          <img
-            src={imageSource}
-            alt={name}
-            loading="eager"
-            decoding="async"
-            fetchPriority="high"
-          />
-        ) : failed ? (
-          <div className="profile-image-state" role="img" aria-label={`${name} profile photo unavailable`}>
-            <span>Profile photo unavailable</span>
-          </div>
-        ) : (
-          <div className="profile-image-state profile-image-loading" aria-hidden="true">
-            <span>Loading profile</span>
-          </div>
-        )}
+    <div className="profile-media">
+      <div className={`profile-frame${ready ? " is-ready" : " is-loading"}`}>
+        <div className="profile-frame-inner">
+          {ready && imageSource ? (
+            <img
+              src={imageSource}
+              alt={name}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          ) : failed ? (
+            <div className="profile-image-state" role="img" aria-label={`${name} profile photo unavailable`}>
+              <span>Profile photo unavailable</span>
+            </div>
+          ) : (
+            <div className="profile-image-state profile-image-loading" aria-hidden="true">
+              <span>Loading profile</span>
+            </div>
+          )}
+        </div>
       </div>
+      <ProfileMusic tracks={musicTracks} />
     </div>
   );
 }
 
-function Hero({ settings, settingsResolved }: { settings: PortfolioSettings; settingsResolved: boolean }) {
+function Hero({
+  settings,
+  settingsResolved,
+  musicTracks,
+}: {
+  settings: PortfolioSettings;
+  settingsResolved: boolean;
+  musicTracks: PortfolioMusicTrack[];
+}) {
   return (
     <section id="top" className="hero">
       <div className="hero-grid">
@@ -171,7 +186,12 @@ function Hero({ settings, settingsResolved }: { settings: PortfolioSettings; set
           <p className="hero-copy">{settings.hero_copy}</p>
         </div>
 
-        <ProfilePhoto name={settings.display_name} src={settings.profile_image_url} resolved={settingsResolved} />
+        <ProfilePhoto
+          name={settings.display_name}
+          src={settings.profile_image_url}
+          resolved={settingsResolved}
+          musicTracks={musicTracks}
+        />
       </div>
 
       <a href="#about" className="continue-link">
@@ -278,6 +298,7 @@ function Footer({ settings }: { settings: PortfolioSettings }) {
 export function Portfolio() {
   const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
   const [experiences, setExperiences] = useState<PortfolioExperience[]>(DEFAULT_EXPERIENCES);
+  const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
   const [settingsResolved, setSettingsResolved] = useState(false);
 
   useEffect(() => {
@@ -292,6 +313,10 @@ export function Portfolio() {
       },
     );
 
+    void fetchPortfolioMusicTracks().then((nextMusicTracks) => {
+      if (!cancelled) setMusicTracks(nextMusicTracks);
+    });
+
     return () => {
       cancelled = true;
     };
@@ -305,7 +330,7 @@ export function Portfolio() {
     <>
       <Header displayName={settings.display_name} />
       <main className="page-shell">
-        <Hero settings={settings} settingsResolved={settingsResolved} />
+        <Hero settings={settings} settingsResolved={settingsResolved} musicTracks={musicTracks} />
         <About settings={settings} />
         <Experience experiences={experiences} />
         <ClinicalStudies />

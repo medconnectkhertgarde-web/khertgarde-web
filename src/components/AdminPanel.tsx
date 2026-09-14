@@ -29,6 +29,12 @@ import {
   type PortfolioExperience,
   type PortfolioSettings,
 } from "@/lib/portfolio-content";
+import {
+  canonicalYouTubeUrl,
+  extractYouTubeVideoId,
+  fetchPortfolioMusicTracks,
+  type PortfolioMusicTrack,
+} from "@/lib/portfolio-music";
 import "@/admin.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
@@ -142,6 +148,7 @@ export function AdminPanel() {
 
   const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
   const [experiences, setExperiences] = useState<PortfolioExperience[]>([]);
+  const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelMessage, setPanelMessage] = useState<string | null>(null);
@@ -151,6 +158,12 @@ export function AdminPanel() {
     role: "",
     description: "",
     note: "",
+  });
+
+  const [newMusic, setNewMusic] = useState({
+    title: "",
+    youtubeUrl: "",
+    sortOrder: 0,
   });
 
   const adminEmailMatch = isAdminUser(user);
@@ -189,9 +202,10 @@ export function AdminPanel() {
     setPanelBusy(true);
     setPanelMessage(null);
 
-    const [nextSettings, nextExperiences, commentsResult] = await Promise.all([
+    const [nextSettings, nextExperiences, nextMusicTracks, commentsResult] = await Promise.all([
       fetchPortfolioSettings(),
       fetchPortfolioExperiences(),
+      fetchPortfolioMusicTracks({ includeDisabled: true }),
       supabase
         .from("portfolio_comments")
         .select("id, author_name, body, created_at")
@@ -201,6 +215,7 @@ export function AdminPanel() {
 
     setSettings(nextSettings);
     setExperiences(nextExperiences.filter((item) => !item.id.startsWith("default-")));
+    setMusicTracks(nextMusicTracks);
 
     if (commentsResult.error) {
       setPanelMessage("Portfolio content loaded, but comments could not be loaded.");
@@ -472,6 +487,118 @@ export function AdminPanel() {
     setPanelBusy(false);
   }
 
+  function updateMusicLocal<K extends keyof PortfolioMusicTrack>(
+    id: string,
+    field: K,
+    value: PortfolioMusicTrack[K],
+  ) {
+    setMusicTracks((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  }
+
+  async function addMusicTrack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !admin || panelBusy) return;
+
+    const videoId = extractYouTubeVideoId(newMusic.youtubeUrl);
+    if (!videoId) {
+      setPanelMessage("Enter a valid YouTube video URL.");
+      return;
+    }
+
+    const nextOrder = musicTracks.length
+      ? Math.max(...musicTracks.map((item) => Number(item.sort_order) || 0)) + 10
+      : 10;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { data, error } = await supabase
+      .from("portfolio_music")
+      .insert({
+        title: newMusic.title.trim() || `Track ${musicTracks.length + 1}`,
+        youtube_url: canonicalYouTubeUrl(videoId),
+        youtube_video_id: videoId,
+        is_enabled: true,
+        sort_order: Number(newMusic.sortOrder) || nextOrder,
+      })
+      .select("id, title, youtube_url, youtube_video_id, is_enabled, sort_order, created_at, updated_at")
+      .single();
+
+    if (error || !data) {
+      setPanelMessage(
+        error?.code === "23505"
+          ? "That YouTube video is already in the portfolio music list."
+          : "The YouTube track could not be added.",
+      );
+    } else {
+      setMusicTracks((items) => [...items, data as PortfolioMusicTrack]);
+      setNewMusic({ title: "", youtubeUrl: "", sortOrder: 0 });
+      setPanelMessage("YouTube track added.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function saveMusicTrack(item: PortfolioMusicTrack) {
+    if (!supabase || !admin || panelBusy) return;
+
+    const videoId = extractYouTubeVideoId(item.youtube_url);
+    if (!videoId) {
+      setPanelMessage("Enter a valid YouTube video URL before saving.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const payload = {
+      title: item.title.trim() || "Profile music",
+      youtube_url: canonicalYouTubeUrl(videoId),
+      youtube_video_id: videoId,
+      is_enabled: Boolean(item.is_enabled),
+      sort_order: Number(item.sort_order) || 0,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("portfolio_music").update(payload).eq("id", item.id);
+
+    if (error) {
+      setPanelMessage(
+        error.code === "23505"
+          ? "That YouTube video is already in the music list."
+          : "The YouTube track could not be saved.",
+      );
+    } else {
+      setMusicTracks((items) =>
+        items.map((track) => (track.id === item.id ? { ...track, ...payload } : track)),
+      );
+      setPanelMessage("YouTube track saved.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function deleteMusicTrack(id: string) {
+    if (!supabase || !admin || panelBusy) return;
+    if (!window.confirm("Remove this YouTube track from the portfolio?")) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase.from("portfolio_music").delete().eq("id", id);
+
+    if (error) {
+      setPanelMessage("The YouTube track could not be removed.");
+    } else {
+      setMusicTracks((items) => items.filter((item) => item.id !== id));
+      setPanelMessage("YouTube track removed.");
+    }
+
+    setPanelBusy(false);
+  }
+
   async function uploadProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -568,6 +695,10 @@ export function AdminPanel() {
   const sortedExperiences = useMemo(
     () => [...experiences].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)),
     [experiences],
+  );
+  const sortedMusicTracks = useMemo(
+    () => [...musicTracks].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)),
+    [musicTracks],
   );
 
   if (!isSupabaseConfigured || !supabase) {
@@ -900,6 +1031,109 @@ export function AdminPanel() {
         <div className="admin-section-heading">
           <div>
             <span>03</span>
+            <h2>Profile music</h2>
+          </div>
+          <p>Optional YouTube tracks for the profile control. If no enabled tracks exist, the public play button disappears automatically.</p>
+        </div>
+
+        <div className="admin-music-note">
+          The public site uses YouTube's standard visible embedded player. YouTube may show ads depending on the video and viewer.
+        </div>
+
+        <div className="admin-music-list">
+          {sortedMusicTracks.map((track) => (
+            <article className="admin-music-card" key={track.id}>
+              <div className="admin-form admin-form-grid">
+                <label>
+                  Display title
+                  <input
+                    value={track.title}
+                    onChange={(event) => updateMusicLocal(track.id, "title", event.target.value)}
+                    maxLength={120}
+                  />
+                </label>
+                <label>
+                  Display order
+                  <input
+                    type="number"
+                    value={track.sort_order}
+                    onChange={(event) => updateMusicLocal(track.id, "sort_order", Number(event.target.value))}
+                  />
+                </label>
+                <label className="admin-field-wide">
+                  YouTube video URL
+                  <input
+                    type="url"
+                    value={track.youtube_url}
+                    onChange={(event) => updateMusicLocal(track.id, "youtube_url", event.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    required
+                  />
+                </label>
+                <label className="admin-checkbox-label admin-field-wide">
+                  <input
+                    type="checkbox"
+                    checked={track.is_enabled}
+                    onChange={(event) => updateMusicLocal(track.id, "is_enabled", event.target.checked)}
+                  />
+                  <span>Enabled on public portfolio</span>
+                </label>
+              </div>
+
+              <div className="admin-card-actions">
+                <button className="button button-primary" type="button" onClick={() => void saveMusicTrack(track)} disabled={panelBusy}>
+                  <Save aria-hidden="true" /> Save
+                </button>
+                <button className="button button-outline admin-danger-button" type="button" onClick={() => void deleteMusicTrack(track.id)} disabled={panelBusy}>
+                  <Trash2 aria-hidden="true" /> Delete
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <form className="admin-new-experience admin-music-add" onSubmit={addMusicTrack}>
+          <h3>Add YouTube track</h3>
+          <div className="admin-form admin-form-grid">
+            <label>
+              Display title (optional)
+              <input
+                value={newMusic.title}
+                onChange={(event) => setNewMusic((current) => ({ ...current, title: event.target.value }))}
+                maxLength={120}
+                placeholder="My profile music"
+              />
+            </label>
+            <label>
+              Display order (optional)
+              <input
+                type="number"
+                value={newMusic.sortOrder || ""}
+                onChange={(event) => setNewMusic((current) => ({ ...current, sortOrder: Number(event.target.value) || 0 }))}
+                placeholder="Auto"
+              />
+            </label>
+            <label className="admin-field-wide">
+              YouTube video URL
+              <input
+                type="url"
+                value={newMusic.youtubeUrl}
+                onChange={(event) => setNewMusic((current) => ({ ...current, youtubeUrl: event.target.value }))}
+                placeholder="https://www.youtube.com/watch?v=..."
+                required
+              />
+            </label>
+          </div>
+          <button className="button button-primary" type="submit" disabled={panelBusy || !newMusic.youtubeUrl.trim()}>
+            <Plus aria-hidden="true" /> Add YouTube track
+          </button>
+        </form>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>04</span>
             <h2>Work experience</h2>
           </div>
           <p>Add, edit, reorder numerically, or remove entries.</p>
@@ -1003,7 +1237,7 @@ export function AdminPanel() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <span>04</span>
+            <span>05</span>
             <h2>Visitor comments</h2>
           </div>
           <p>Newest active comments. Delete only when moderation is needed.</p>
@@ -1040,7 +1274,7 @@ export function AdminPanel() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <span>05</span>
+            <span>06</span>
             <h2>Admin security</h2>
           </div>
           <p>Set or change the password attached to the authorized Supabase account.</p>

@@ -439,3 +439,52 @@
     flex-direction: column;
   }
 }
+
+/* Optional profile music administration -------------------------------------- */
+.admin-music-note {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  padding: 0.8rem 0.9rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.admin-music-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-music-card {
+  border: 1px solid var(--border);
+  background: var(--muted);
+  padding: 1rem;
+}
+
+.admin-music-add {
+  margin-top: 1.25rem;
+}
+
+.admin-checkbox-label {
+  display: flex !important;
+  align-items: center;
+  grid-template-columns: none !important;
+  gap: 0.55rem !important;
+  cursor: pointer;
+}
+
+.admin-form .admin-checkbox-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  margin: 0;
+  accent-color: var(--foreground);
+}
+
+.admin-checkbox-label span {
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+}

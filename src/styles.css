@@ -855,3 +855,214 @@ svg {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Optional profile music control ------------------------------------------------ */
+.profile-media {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-music {
+  position: relative;
+  z-index: 8;
+}
+
+.profile-music-button {
+  position: relative;
+  display: inline-grid;
+  width: 3.15rem;
+  height: 3.15rem;
+  margin: -1.55rem 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--foreground);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0.28rem 0.28rem 0 var(--muted);
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.profile-music-button:hover {
+  transform: translateY(-2px);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.profile-music-button:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 3px;
+}
+
+.profile-music-icon,
+.profile-music-equalizer {
+  position: absolute;
+  display: grid;
+  place-items: center;
+}
+
+.profile-music-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.profile-music-equalizer {
+  display: none;
+  grid-template-columns: repeat(3, 0.13rem);
+  align-items: end;
+  gap: 0.12rem;
+  height: 0.9rem;
+}
+
+.profile-music-equalizer i {
+  width: 0.13rem;
+  height: 40%;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: profile-music-bar 700ms ease-in-out infinite alternate;
+}
+
+.profile-music-equalizer i:nth-child(2) {
+  height: 85%;
+  animation-delay: -220ms;
+}
+
+.profile-music-equalizer i:nth-child(3) {
+  height: 60%;
+  animation-delay: -410ms;
+}
+
+.profile-music-button.is-playing .profile-music-icon {
+  opacity: 0;
+}
+
+.profile-music-button.is-playing .profile-music-equalizer {
+  display: grid;
+}
+
+@keyframes profile-music-bar {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
+
+.profile-music-panel {
+  width: min(100%, 30rem);
+  margin: 0.9rem 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: 0.4rem 0.4rem 0 var(--muted);
+}
+
+.profile-music-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem;
+}
+
+.profile-music-panel-header > div {
+  min-width: 0;
+}
+
+.profile-music-panel-header strong {
+  display: block;
+  margin-top: 0.28rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.profile-music-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.profile-music-source svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.profile-youtube-player {
+  width: 100%;
+  min-height: 200px;
+  background: #000;
+}
+
+.profile-youtube-mount,
+.profile-youtube-mount iframe {
+  display: block;
+  width: 100% !important;
+  height: clamp(200px, 18vw, 270px) !important;
+  min-height: 200px;
+  border: 0;
+}
+
+.profile-music-error {
+  display: grid;
+  min-height: 200px;
+  place-items: center;
+  padding: 1.25rem;
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.profile-music-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  border-top: 1px solid var(--border);
+  padding: 0.7rem;
+}
+
+.profile-music-inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  padding: 0.35rem 0.55rem;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.profile-music-inline-control svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .profile-music-panel {
+    width: 100%;
+  }
+
+  .profile-youtube-mount,
+  .profile-youtube-mount iframe {
+    height: max(200px, 56vw) !important;
+    max-height: 270px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-music-equalizer i {
+    animation: none;
+  }
+
+  .profile-music-button {
+    transition: none;
+  }
+}
