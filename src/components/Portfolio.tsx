@@ -90,30 +90,73 @@ function Header({ displayName }: { displayName: string }) {
   );
 }
 
-function ProfilePhoto({ name, src }: { name: string; src: string | null }) {
-  const [missing, setMissing] = useState(false);
-  const imageSource = src || "/profile.jpg";
+function ProfilePhoto({
+  name,
+  src,
+  resolved,
+}: {
+  name: string;
+  src: string | null;
+  resolved: boolean;
+}) {
+  const imageSource = resolved ? src || "/profile.jpg" : null;
+  const [loadedSource, setLoadedSource] = useState<string | null>(null);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
 
   useEffect(() => {
-    setMissing(false);
+    if (!imageSource) return;
+
+    let active = true;
+    const preload = new Image();
+
+    preload.onload = () => {
+      if (!active) return;
+      setFailedSource(null);
+      setLoadedSource(imageSource);
+    };
+
+    preload.onerror = () => {
+      if (!active) return;
+      setLoadedSource(null);
+      setFailedSource(imageSource);
+    };
+
+    preload.src = imageSource;
+
+    return () => {
+      active = false;
+    };
   }, [imageSource]);
 
-  if (missing) {
-    return (
-      <div className="profile-placeholder" aria-label="Profile photo placeholder">
-        <span>Profile photo</span>
-      </div>
-    );
-  }
+  const ready = Boolean(imageSource && loadedSource === imageSource);
+  const failed = Boolean(imageSource && failedSource === imageSource);
 
   return (
-    <div className="profile-placeholder profile-photo-shell">
-      <img src={imageSource} alt={name} loading="lazy" onError={() => setMissing(true)} />
+    <div className={`profile-frame${ready ? " is-ready" : " is-loading"}`}>
+      <div className="profile-frame-inner">
+        {ready && imageSource ? (
+          <img
+            src={imageSource}
+            alt={name}
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
+          />
+        ) : failed ? (
+          <div className="profile-image-state" role="img" aria-label={`${name} profile photo unavailable`}>
+            <span>Profile photo unavailable</span>
+          </div>
+        ) : (
+          <div className="profile-image-state profile-image-loading" aria-hidden="true">
+            <span>Loading profile</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function Hero({ settings }: { settings: PortfolioSettings }) {
+function Hero({ settings, settingsResolved }: { settings: PortfolioSettings; settingsResolved: boolean }) {
   return (
     <section id="top" className="hero">
       <div className="hero-grid">
@@ -128,7 +171,7 @@ function Hero({ settings }: { settings: PortfolioSettings }) {
           <p className="hero-copy">{settings.hero_copy}</p>
         </div>
 
-        <ProfilePhoto name={settings.display_name} src={settings.profile_image_url} />
+        <ProfilePhoto name={settings.display_name} src={settings.profile_image_url} resolved={settingsResolved} />
       </div>
 
       <a href="#about" className="continue-link">
@@ -235,6 +278,7 @@ function Footer({ settings }: { settings: PortfolioSettings }) {
 export function Portfolio() {
   const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
   const [experiences, setExperiences] = useState<PortfolioExperience[]>(DEFAULT_EXPERIENCES);
+  const [settingsResolved, setSettingsResolved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,6 +288,7 @@ export function Portfolio() {
         if (cancelled) return;
         setSettings(nextSettings);
         setExperiences(nextExperiences);
+        setSettingsResolved(nextSettings !== DEFAULT_PORTFOLIO_SETTINGS);
       },
     );
 
@@ -260,7 +305,7 @@ export function Portfolio() {
     <>
       <Header displayName={settings.display_name} />
       <main className="page-shell">
-        <Hero settings={settings} />
+        <Hero settings={settings} settingsResolved={settingsResolved} />
         <About settings={settings} />
         <Experience experiences={experiences} />
         <ClinicalStudies />

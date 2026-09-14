@@ -33,7 +33,6 @@ import "@/admin.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
 const PROFILE_BUCKET = "portfolio-assets";
-const PROFILE_OBJECT = "profile/current";
 const MAX_PROFILE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_PROFILE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -46,6 +45,35 @@ interface AdminComment {
 
 function isAdminUser(user: User | null) {
   return user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
+}
+
+function profileExtension(mimeType: string) {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function profileUploadNonce() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return Math.random().toString(36).slice(2);
+}
+
+function getPortfolioAssetPath(publicUrl: string | null) {
+  if (!publicUrl) return null;
+
+  try {
+    const url = new URL(publicUrl);
+    const marker = `/storage/v1/object/public/${PROFILE_BUCKET}/`;
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+
+    return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+  } catch {
+    return null;
+  }
 }
 
 function hasPasswordAuthentication(session: Session | null) {
@@ -463,10 +491,13 @@ export function AdminPanel() {
     setPanelBusy(true);
     setPanelMessage(null);
 
-    const { error: uploadError } = await supabase.storage.from(PROFILE_BUCKET).upload(PROFILE_OBJECT, file, {
-      cacheControl: "3600",
+    const previousAssetPath = getPortfolioAssetPath(settings.profile_image_url);
+    const objectPath = `profile/profile-${Date.now()}-${profileUploadNonce()}.${profileExtension(file.type)}`;
+
+    const { error: uploadError } = await supabase.storage.from(PROFILE_BUCKET).upload(objectPath, file, {
+      cacheControl: "31536000",
       contentType: file.type,
-      upsert: true,
+      upsert: false,
     });
 
     if (uploadError) {
@@ -475,21 +506,27 @@ export function AdminPanel() {
       return;
     }
 
-    const { data } = supabase.storage.from(PROFILE_BUCKET).getPublicUrl(PROFILE_OBJECT);
-    const versionedUrl = `${data.publicUrl}?v=${Date.now()}`;
+    const { data } = supabase.storage.from(PROFILE_BUCKET).getPublicUrl(objectPath);
+    const nextProfileUrl = data.publicUrl;
 
     const { error: updateError } = await supabase
       .from("portfolio_settings")
       .update({
-        profile_image_url: versionedUrl,
+        profile_image_url: nextProfileUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", 1);
 
     if (updateError) {
+      await supabase.storage.from(PROFILE_BUCKET).remove([objectPath]);
       setPanelMessage("The image uploaded, but the portfolio photo could not be updated.");
     } else {
-      setSettings((current) => ({ ...current, profile_image_url: versionedUrl }));
+      setSettings((current) => ({ ...current, profile_image_url: nextProfileUrl }));
+
+      if (previousAssetPath && previousAssetPath !== objectPath) {
+        void supabase.storage.from(PROFILE_BUCKET).remove([previousAssetPath]);
+      }
+
       setPanelMessage("Profile image updated.");
     }
 
@@ -501,6 +538,8 @@ export function AdminPanel() {
 
     setPanelBusy(true);
     setPanelMessage(null);
+
+    const previousAssetPath = getPortfolioAssetPath(settings.profile_image_url);
 
     const { error } = await supabase
       .from("portfolio_settings")
@@ -514,6 +553,11 @@ export function AdminPanel() {
       setPanelMessage("The profile image could not be reset.");
     } else {
       setSettings((current) => ({ ...current, profile_image_url: null }));
+
+      if (previousAssetPath) {
+        void supabase.storage.from(PROFILE_BUCKET).remove([previousAssetPath]);
+      }
+
       setPanelMessage("The bundled profile image is active.");
     }
 

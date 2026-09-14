@@ -177,9 +177,9 @@ svg {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 14rem;
+  grid-template-columns: minmax(0, 1fr) clamp(18rem, 26vw, 21rem);
   align-items: start;
-  gap: 4rem;
+  gap: clamp(3rem, 5vw, 5rem);
 }
 
 .eyebrow {
@@ -222,30 +222,78 @@ svg {
   margin: 1.5rem 0 0;
 }
 
-.profile-placeholder {
-  display: grid;
+.profile-frame {
+  position: relative;
   width: 100%;
   aspect-ratio: 4 / 5;
-  place-items: center;
+  padding: 0.5rem;
+  border: 1px solid var(--foreground);
+  background: var(--background);
+  box-shadow: 0.55rem 0.55rem 0 var(--muted);
+  isolation: isolate;
+}
+
+.profile-frame::after {
+  position: absolute;
+  inset: 0.22rem;
   border: 1px solid var(--border);
+  content: "";
+  pointer-events: none;
+  z-index: 2;
+}
+
+.profile-frame-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: var(--muted);
 }
 
-.profile-photo-shell {
-  overflow: hidden;
-}
-
-.profile-photo-shell img {
+.profile-frame img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.profile-placeholder span {
+.profile-image-state {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: var(--muted);
+}
+
+.profile-image-state span {
+  max-width: 9rem;
   color: var(--muted-foreground);
   font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
+  line-height: 1.5;
+  text-align: center;
   text-transform: uppercase;
+}
+
+.profile-image-loading {
+  background:
+    linear-gradient(135deg, transparent 0 46%, var(--border) 46% 46.5%, transparent 46.5% 100%),
+    var(--muted);
+}
+
+.profile-frame.is-ready img {
+  animation: profile-reveal 160ms ease-out both;
+}
+
+@keyframes profile-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-frame.is-ready img {
+    animation: none;
+  }
 }
 
 .continue-link {
@@ -666,8 +714,9 @@ svg {
     gap: 2.5rem;
   }
 
-  .profile-placeholder {
-    max-width: 13rem;
+  .profile-frame {
+    width: min(20rem, 72vw);
+    justify-self: center;
   }
 
   .split-section {
@@ -724,6 +773,11 @@ svg {
 
   .hero h1 {
     font-size: clamp(2.8rem, 17vw, 4.6rem);
+  }
+
+  .profile-frame {
+    width: min(100%, 18rem);
+    box-shadow: 0.4rem 0.4rem 0 var(--muted);
   }
 
   .section {
