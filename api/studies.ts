@@ -4,6 +4,12 @@ const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
 const GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const GOOGLE_SLIDES_MIME = "application/vnd.google-apps.presentation";
 
+const DRIVE_REQUEST_TIMEOUT_MS = 4500;
+const DRIVE_REQUEST_ATTEMPTS = 2;
+const DRIVE_MAX_CONCURRENT_REQUESTS = 4;
+const MEMORY_CACHE_FRESH_MS = 30_000;
+const MEMORY_CACHE_STALE_MS = 15 * 60_000;
+
 interface DriveFile {
   id: string;
   name: string;
@@ -42,6 +48,87 @@ interface PublicStudy {
   download_url: string | null;
 }
 
+interface CachedStudies {
+  studies: PublicStudy[];
+  syncedAt: string;
+  cachedAt: number;
+}
+
+class DriveRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "DriveRequestError";
+    this.status = status;
+  }
+}
+
+class Semaphore {
+  private active = 0;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(private readonly limit: number) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active >= this.limit) {
+      await new Promise<void>((resolve) => this.queue.push(resolve));
+    }
+
+    this.active += 1;
+
+    try {
+      return await task();
+    } finally {
+      this.active -= 1;
+      this.queue.shift()?.();
+    }
+  }
+}
+
+let memoryCache: CachedStudies | null = null;
+
+function ensureStudiesEnvironmentLoaded() {
+  if (
+    process.env.GOOGLE_DRIVE_API_KEY?.trim() &&
+    process.env.GOOGLE_DRIVE_FOLDER_URL?.trim()
+  ) {
+    return;
+  }
+
+  // Vercel normally injects environment variables into functions. On local
+  // Windows development, the CLI can occasionally start the function worker
+  // without forwarding .env.local. Node 22 can load the file directly, so use
+  // that only as a local fallback. In production these files are absent and
+  // normal Vercel environment variables remain the source of truth.
+  const runtimeProcess = process as typeof process & {
+    loadEnvFile?: (path?: string) => void;
+  };
+
+  if (typeof runtimeProcess.loadEnvFile !== "function") return;
+
+  const candidates = [
+    ".env.local",
+    ".env.development.local",
+    ".vercel/.env.development.local",
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      process.env.GOOGLE_DRIVE_API_KEY?.trim() &&
+      process.env.GOOGLE_DRIVE_FOLDER_URL?.trim()
+    ) {
+      break;
+    }
+
+    try {
+      runtimeProcess.loadEnvFile(candidate);
+    } catch {
+      // Missing local env files are expected in production and are harmless.
+    }
+  }
+}
+
 function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -56,7 +143,6 @@ function parseFolderReference(input: string | undefined): FolderReference | null
   const raw = input?.trim();
   if (!raw) return null;
 
-  // Allow a raw folder ID too, even though the intended configuration is a full folder URL.
   if (/^[A-Za-z0-9_-]{10,}$/.test(raw)) {
     return { id: raw };
   }
@@ -177,7 +263,7 @@ function downloadUrl(file: DriveFile): string | null {
   if (file.webContentLink) return file.webContentLink;
 
   const id = encodeURIComponent(file.id);
-  let url: string | null = null;
+  let url: string;
 
   switch (file.mimeType) {
     case GOOGLE_DOC_MIME:
@@ -196,16 +282,79 @@ function downloadUrl(file: DriveFile): string | null {
   return appendResourceKey(url, file.resourceKey);
 }
 
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryDriveError(error: unknown) {
+  if (error instanceof DriveRequestError) {
+    return error.status === 429 || (typeof error.status === "number" && error.status >= 500);
+  }
+
+  if (error instanceof Error) {
+    return error.name === "AbortError" || /fetch|network|socket|timeout|econnreset|epipe/i.test(error.message);
+  }
+
+  return false;
+}
+
+async function fetchDrivePage(
+  url: string,
+  headers: Headers,
+  semaphore: Semaphore,
+): Promise<DriveListResponse> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= DRIVE_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      return await semaphore.run(async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), DRIVE_REQUEST_TIMEOUT_MS);
+
+        try {
+          const response = await fetch(url, {
+            headers,
+            signal: controller.signal,
+          });
+
+          const payload = (await response.json()) as DriveListResponse;
+
+          if (!response.ok) {
+            const reason =
+              payload.error?.message || `Google Drive API returned HTTP ${response.status}`;
+            throw new DriveRequestError(reason, response.status);
+          }
+
+          return payload;
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+    } catch (error) {
+      lastError = error;
+
+      if (attempt >= DRIVE_REQUEST_ATTEMPTS || !shouldRetryDriveError(error)) {
+        throw error;
+      }
+
+      await delay(200 * attempt);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Google Drive request failed");
+}
+
 async function listFolder(
   folder: FolderReference,
   apiKey: string,
+  semaphore: Semaphore,
   depth = 0,
   seen = new Set<string>(),
 ): Promise<DriveFile[]> {
   if (seen.has(folder.id)) return [];
   seen.add(folder.id);
 
-  const output: DriveFile[] = [];
+  const entries: DriveFile[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -227,42 +376,52 @@ async function listFolder(
       headers.set("X-Goog-Drive-Resource-Keys", `${folder.id}/${folder.resourceKey}`);
     }
 
-    const response = await fetch(`${DRIVE_API_BASE}?${params.toString()}`, { headers });
-    const payload = (await response.json()) as DriveListResponse;
+    const payload = await fetchDrivePage(
+      `${DRIVE_API_BASE}?${params.toString()}`,
+      headers,
+      semaphore,
+    );
 
-    if (!response.ok) {
-      const reason = payload.error?.message || `Google Drive API returned HTTP ${response.status}`;
-      throw new Error(reason);
-    }
-
-    const files = payload.files ?? [];
-
-    for (const file of files) {
-      if (!file.id || !file.name || !file.mimeType) continue;
-
-      if (file.mimeType === GOOGLE_FOLDER_MIME) {
-        // Automatically include studies organized into category subfolders, up to 3 levels deep.
-        if (depth < 3) {
-          const nested = await listFolder(
-            { id: file.id, resourceKey: file.resourceKey },
-            apiKey,
-            depth + 1,
-            seen,
-          );
-          output.push(...nested);
-        }
-        continue;
-      }
-
-      // Ignore obvious hidden/system artifacts while keeping all real Drive-viewable study files.
-      if (file.name.startsWith(".") || file.name === "Thumbs.db" || file.name === "desktop.ini") continue;
-      output.push(file);
-    }
-
+    entries.push(...(payload.files ?? []));
     pageToken = payload.nextPageToken;
   } while (pageToken);
 
-  return output;
+  const files: DriveFile[] = [];
+  const subfolders: FolderReference[] = [];
+
+  for (const file of entries) {
+    if (!file.id || !file.name || !file.mimeType) continue;
+
+    if (file.mimeType === GOOGLE_FOLDER_MIME) {
+      if (depth < 3) {
+        subfolders.push({ id: file.id, resourceKey: file.resourceKey });
+      }
+      continue;
+    }
+
+    if (file.name.startsWith(".") || file.name === "Thumbs.db" || file.name === "desktop.ini") {
+      continue;
+    }
+
+    files.push(file);
+  }
+
+  // Scan sibling subfolders concurrently, while the shared semaphore keeps the
+  // total number of simultaneous Drive API requests bounded.
+  const nestedGroups = await Promise.all(
+    subfolders.map(async (subfolder) => {
+      try {
+        return await listFolder(subfolder, apiKey, semaphore, depth + 1, seen);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown nested-folder error";
+        console.warn(`Skipping an unavailable Google Drive subfolder (${subfolder.id}):`, message);
+        return [];
+      }
+    }),
+  );
+
+  for (const nested of nestedGroups) files.push(...nested);
+  return files;
 }
 
 function toPublicStudy(file: DriveFile): PublicStudy {
@@ -283,15 +442,53 @@ function toPublicStudy(file: DriveFile): PublicStudy {
   };
 }
 
+function sortStudies(files: DriveFile[]) {
+  return files
+    .map(toPublicStudy)
+    .sort((a, b) => {
+      const left = a.published_at ? Date.parse(a.published_at) : 0;
+      const right = b.published_at ? Date.parse(b.published_at) : 0;
+      return right - left || a.title.localeCompare(b.title);
+    });
+}
+
+function successResponse(cache: CachedStudies, cacheState: "fresh" | "refreshed" | "stale") {
+  return json(
+    {
+      studies: cache.studies,
+      synced_at: cache.syncedAt,
+      cache: cacheState,
+    },
+    {
+      status: 200,
+      headers: {
+        // Visitors get a fast cached response. Vercel may serve the previous successful
+        // response while it refreshes in the background, keeping Drive hiccups invisible.
+        "Cache-Control": "public, max-age=0, s-maxage=45, stale-while-revalidate=600",
+      },
+    },
+  );
+}
+
 export async function GET() {
+  ensureStudiesEnvironmentLoaded();
+
   const apiKey = process.env.GOOGLE_DRIVE_API_KEY?.trim();
-  const folder = parseFolderReference(process.env.GOOGLE_DRIVE_FOLDER_URL);
+  const folderUrl = process.env.GOOGLE_DRIVE_FOLDER_URL?.trim();
+  const folder = parseFolderReference(folderUrl);
 
   if (!apiKey || !folder) {
+    const missing = [
+      !apiKey ? "GOOGLE_DRIVE_API_KEY" : null,
+      !folderUrl ? "GOOGLE_DRIVE_FOLDER_URL" : null,
+      folderUrl && !folder ? "GOOGLE_DRIVE_FOLDER_URL (invalid folder URL or ID)" : null,
+    ].filter(Boolean);
+
     return json(
       {
         error:
-          "Google Drive studies are not configured. Set GOOGLE_DRIVE_API_KEY and GOOGLE_DRIVE_FOLDER_URL in Vercel.",
+          "Google Drive studies are not configured for this runtime. Configure the missing values in Vercel Development or .env.local.",
+        missing,
       },
       {
         status: 500,
@@ -300,33 +497,34 @@ export async function GET() {
     );
   }
 
-  try {
-    const files = await listFolder(folder, apiKey);
-    const studies = files
-      .map(toPublicStudy)
-      .sort((a, b) => {
-        const left = a.published_at ? Date.parse(a.published_at) : 0;
-        const right = b.published_at ? Date.parse(b.published_at) : 0;
-        return right - left || a.title.localeCompare(b.title);
-      });
+  const now = Date.now();
 
-    return json(
-      {
-        studies,
-        synced_at: new Date().toISOString(),
-      },
-      {
-        status: 200,
-        headers: {
-          // The portfolio refreshes automatically while avoiding a Drive API request on every page view.
-          // New uploads become visible after the short CDN cache window expires.
-          "Cache-Control": "public, s-maxage=30",
-        },
-      },
-    );
+  if (memoryCache && now - memoryCache.cachedAt < MEMORY_CACHE_FRESH_MS) {
+    return successResponse(memoryCache, "fresh");
+  }
+
+  try {
+    const semaphore = new Semaphore(DRIVE_MAX_CONCURRENT_REQUESTS);
+    const files = await listFolder(folder, apiKey, semaphore);
+    const studies = sortStudies(files);
+    const syncedAt = new Date().toISOString();
+
+    memoryCache = {
+      studies,
+      syncedAt,
+      cachedAt: Date.now(),
+    };
+
+    return successResponse(memoryCache, "refreshed");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Google Drive error";
     console.error("Unable to list the public Google Drive studies folder:", message);
+
+    // If this warm function has a recent successful result, prefer that over blanking the
+    // entire studies section during a temporary Google/network problem.
+    if (memoryCache && now - memoryCache.cachedAt < MEMORY_CACHE_STALE_MS) {
+      return successResponse(memoryCache, "stale");
+    }
 
     return json(
       {
