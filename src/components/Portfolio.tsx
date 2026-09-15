@@ -3,6 +3,8 @@ import { ArrowDown, Mail, Menu, Moon, Phone, Sun, X } from "lucide-react";
 
 import { ClinicalStudies } from "@/components/ClinicalStudies";
 import { Comments } from "@/components/Comments";
+import { CurrentWork } from "@/components/CurrentWork";
+import { PortfolioRating } from "@/components/PortfolioRating";
 import { ProfileMusic } from "@/components/ProfileMusic";
 import { SkillsGraph } from "@/components/SkillsGraph";
 import {
@@ -22,6 +24,7 @@ const navItems = [
   ["About", "about"],
   ["Experience", "experience"],
   ["Skills", "skills"],
+  ["Current work", "current-work"],
   ["Clinical studies", "clinical-studies"],
   ["Contact", "contact"],
   ["Comments", "comments"],
@@ -350,8 +353,10 @@ export function Portfolio() {
         <About settings={settings} />
         <Experience experiences={experiences} />
         <SkillsGraph skills={skills} loading={!skillsResolved} />
+        <CurrentWork />
         <ClinicalStudies />
         <Contact settings={settings} />
+        <PortfolioRating />
         <Comments />
         <Footer settings={settings} />
       </main>

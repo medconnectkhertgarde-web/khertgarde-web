@@ -750,3 +750,114 @@
     transition: none;
   }
 }
+
+/* Current work admin ------------------------------------------------------- */
+.admin-current-work-board {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px),
+    var(--background);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.admin-current-work-board::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 28%, var(--background) 100%);
+  opacity: 0.25;
+  content: "";
+}
+
+.admin-current-work-board > * {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-current-work-composer {
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.admin-current-work-composer label {
+  display: grid;
+  gap: 0.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.admin-current-work-composer textarea,
+.admin-current-work-card textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--background);
+  padding: 0.8rem;
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.55;
+}
+
+.admin-current-work-composer-actions,
+.admin-current-work-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.7rem;
+}
+
+.admin-current-work-composer-actions > span,
+.admin-current-work-meta time {
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.63rem;
+}
+
+.admin-current-work-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-current-work-card {
+  width: min(92%, 52rem);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--background) 92%, var(--foreground) 8%);
+  padding: 0.9rem;
+  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 5%);
+}
+
+.admin-current-work-card:nth-child(even) {
+  justify-self: end;
+}
+
+.admin-current-work-card .admin-card-actions {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .admin-current-work-board {
+    background-size: 40px 40px;
+  }
+
+  .admin-current-work-card {
+    width: 100%;
+  }
+
+  .admin-current-work-composer-actions,
+  .admin-current-work-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

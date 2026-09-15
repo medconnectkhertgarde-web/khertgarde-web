@@ -39,6 +39,10 @@ import {
   fetchPortfolioSkills,
   type PortfolioSkill,
 } from "@/lib/portfolio-skills";
+import {
+  fetchPortfolioCurrentWork,
+  type PortfolioCurrentWorkItem,
+} from "@/lib/portfolio-current-work";
 import "@/admin.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
@@ -58,6 +62,7 @@ type AdminSectionId =
   | "photo"
   | "music"
   | "skills"
+  | "current-work"
   | "experience"
   | "comments"
   | "security";
@@ -67,9 +72,10 @@ const ADMIN_SECTIONS: Array<{ id: AdminSectionId; number: string; label: string 
   { id: "photo", number: "02", label: "Photo" },
   { id: "music", number: "03", label: "Music" },
   { id: "skills", number: "04", label: "Skills" },
-  { id: "experience", number: "05", label: "Experience" },
-  { id: "comments", number: "06", label: "Comments" },
-  { id: "security", number: "07", label: "Security" },
+  { id: "current-work", number: "05", label: "Current work" },
+  { id: "experience", number: "06", label: "Experience" },
+  { id: "comments", number: "07", label: "Comments" },
+  { id: "security", number: "08", label: "Security" },
 ];
 
 function adminSectionDomId(id: AdminSectionId) {
@@ -177,6 +183,7 @@ export function AdminPanel() {
   const [experiences, setExperiences] = useState<PortfolioExperience[]>([]);
   const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
   const [skills, setSkills] = useState<PortfolioSkill[]>([]);
+  const [currentWork, setCurrentWork] = useState<PortfolioCurrentWorkItem[]>([]);
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelMessage, setPanelMessage] = useState<string | null>(null);
@@ -203,6 +210,8 @@ export function AdminPanel() {
     description: "",
     sortOrder: 0,
   });
+
+  const [newCurrentWorkBody, setNewCurrentWorkBody] = useState("");
 
   const adminEmailMatch = isAdminUser(user);
   const passwordSession = hasPasswordAuthentication(session);
@@ -240,11 +249,12 @@ export function AdminPanel() {
     setPanelBusy(true);
     setPanelMessage(null);
 
-    const [nextSettings, nextExperiences, nextMusicTracks, nextSkills, commentsResult] = await Promise.all([
+    const [nextSettings, nextExperiences, nextMusicTracks, nextSkills, nextCurrentWork, commentsResult] = await Promise.all([
       fetchPortfolioSettings(),
       fetchPortfolioExperiences(),
       fetchPortfolioMusicTracks({ includeDisabled: true }),
       fetchPortfolioSkills({ includeDisabled: true }),
+      fetchPortfolioCurrentWork({ includeHidden: true, limit: 100 }),
       supabase
         .from("portfolio_comments")
         .select("id, author_name, body, created_at")
@@ -256,6 +266,7 @@ export function AdminPanel() {
     setExperiences(nextExperiences.filter((item) => !item.id.startsWith("default-")));
     setMusicTracks(nextMusicTracks);
     setSkills(nextSkills.filter((item) => !item.id.startsWith("default-")));
+    setCurrentWork(nextCurrentWork);
 
     if (commentsResult.error) {
       setPanelMessage("Portfolio content loaded, but comments could not be loaded.");
@@ -834,6 +845,83 @@ export function AdminPanel() {
       setPanelMessage("Skill removed.");
     }
 
+    setPanelBusy(false);
+  }
+
+  function updateCurrentWorkLocal(id: string, field: "body" | "is_visible", value: string | boolean) {
+    setCurrentWork((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  }
+
+  async function addCurrentWork(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !admin || panelBusy) return;
+
+    const body = newCurrentWorkBody.trim();
+    if (!body) {
+      setPanelMessage("Write an update before publishing.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+    const { data, error } = await supabase
+      .from("portfolio_current_work")
+      .insert({ body, is_visible: true })
+      .select("id, body, is_visible, created_at, updated_at")
+      .single();
+
+    if (error || !data) {
+      setPanelMessage("The current work update could not be published.");
+    } else {
+      setCurrentWork((items) => [data as PortfolioCurrentWorkItem, ...items]);
+      setNewCurrentWorkBody("");
+      setPanelMessage("Current work update published.");
+    }
+    setPanelBusy(false);
+  }
+
+  async function saveCurrentWork(item: PortfolioCurrentWorkItem) {
+    if (!supabase || !admin || panelBusy) return;
+    const body = item.body.trim();
+    if (!body) {
+      setPanelMessage("Current work messages cannot be empty.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+    const updatedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("portfolio_current_work")
+      .update({ body, is_visible: Boolean(item.is_visible), updated_at: updatedAt })
+      .eq("id", item.id);
+
+    if (error) {
+      setPanelMessage("The current work update could not be saved.");
+    } else {
+      setCurrentWork((items) =>
+        items.map((entry) => entry.id === item.id ? { ...entry, body, is_visible: Boolean(item.is_visible), updated_at: updatedAt } : entry),
+      );
+      setPanelMessage("Current work update saved.");
+    }
+    setPanelBusy(false);
+  }
+
+  async function deleteCurrentWork(id: string) {
+    if (!supabase || !admin || panelBusy) return;
+    if (!window.confirm("Delete this current work update?")) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+    const { error } = await supabase.from("portfolio_current_work").delete().eq("id", id);
+    if (error) {
+      setPanelMessage("The current work update could not be deleted.");
+    } else {
+      setCurrentWork((items) => items.filter((item) => item.id !== id));
+      setPanelMessage("Current work update deleted.");
+    }
     setPanelBusy(false);
   }
 
@@ -1553,13 +1641,91 @@ export function AdminPanel() {
       </section>
 
       <section
+        className={`admin-section admin-current-work-section${isAdminSectionCollapsed("current-work") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("current-work")}
+        data-admin-section="current-work"
+      >
+        <div className="admin-section-heading">
+          <div>
+            <span>05</span>
+            <h2>Currently working on</h2>
+          </div>
+          <p>Publish short public updates without opening a separate editor.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("current-work")}
+            aria-expanded={!isAdminSectionCollapsed("current-work")}
+          >
+            {isAdminSectionCollapsed("current-work") ? "Expand" : "Collapse"}
+          </button>
+        </div>
+
+        <div className="admin-current-work-board">
+          <form className="admin-current-work-composer" onSubmit={addCurrentWork}>
+            <label>
+              New update
+              <textarea
+                value={newCurrentWorkBody}
+                onChange={(event) => setNewCurrentWorkBody(event.target.value.slice(0, 600))}
+                rows={3}
+                maxLength={600}
+                placeholder="Share what you are currently working on..."
+                required
+              />
+            </label>
+            <div className="admin-current-work-composer-actions">
+              <span>{newCurrentWorkBody.length}/600</span>
+              <button className="button button-primary" type="submit" disabled={panelBusy || !newCurrentWorkBody.trim()}>
+                <Plus aria-hidden="true" /> Publish update
+              </button>
+            </div>
+          </form>
+
+          <div className="admin-current-work-list">
+            {currentWork.length ? currentWork.map((item) => (
+              <article className="admin-current-work-card" key={item.id}>
+                <div className="admin-current-work-meta">
+                  <time dateTime={item.created_at}>{formatDate(item.created_at)}</time>
+                  <label className="admin-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={item.is_visible}
+                      onChange={(event) => updateCurrentWorkLocal(item.id, "is_visible", event.target.checked)}
+                    />
+                    <span>Visible publicly</span>
+                  </label>
+                </div>
+                <textarea
+                  value={item.body}
+                  onChange={(event) => updateCurrentWorkLocal(item.id, "body", event.target.value.slice(0, 600))}
+                  rows={3}
+                  maxLength={600}
+                />
+                <div className="admin-card-actions">
+                  <button className="button button-primary" type="button" onClick={() => void saveCurrentWork(item)} disabled={panelBusy || !item.body.trim()}>
+                    <Save aria-hidden="true" /> Save
+                  </button>
+                  <button className="button button-outline admin-danger-button" type="button" onClick={() => void deleteCurrentWork(item.id)} disabled={panelBusy}>
+                    <Trash2 aria-hidden="true" /> Delete
+                  </button>
+                </div>
+              </article>
+            )) : (
+              <div className="admin-state">No current work updates yet.</div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section
         className={`admin-section${isAdminSectionCollapsed("experience") ? " is-collapsed" : ""}`}
         id={adminSectionDomId("experience")}
         data-admin-section="experience"
       >
         <div className="admin-section-heading">
           <div>
-            <span>05</span>
+            <span>06</span>
             <h2>Work experience</h2>
           </div>
           <p>Add, edit, reorder numerically, or remove entries.</p>
@@ -1675,7 +1841,7 @@ export function AdminPanel() {
       >
         <div className="admin-section-heading">
           <div>
-            <span>06</span>
+            <span>07</span>
             <h2>Visitor comments</h2>
           </div>
           <p>Newest active comments. Delete only when moderation is needed.</p>
@@ -1724,7 +1890,7 @@ export function AdminPanel() {
       >
         <div className="admin-section-heading">
           <div>
-            <span>07</span>
+            <span>08</span>
             <h2>Admin security</h2>
           </div>
           <p>Set or change the password attached to the authorized Supabase account.</p>
