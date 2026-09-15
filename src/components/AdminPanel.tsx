@@ -53,6 +53,29 @@ interface AdminComment {
   created_at: string;
 }
 
+type AdminSectionId =
+  | "details"
+  | "photo"
+  | "music"
+  | "skills"
+  | "experience"
+  | "comments"
+  | "security";
+
+const ADMIN_SECTIONS: Array<{ id: AdminSectionId; number: string; label: string }> = [
+  { id: "details", number: "01", label: "Details" },
+  { id: "photo", number: "02", label: "Photo" },
+  { id: "music", number: "03", label: "Music" },
+  { id: "skills", number: "04", label: "Skills" },
+  { id: "experience", number: "05", label: "Experience" },
+  { id: "comments", number: "06", label: "Comments" },
+  { id: "security", number: "07", label: "Security" },
+];
+
+function adminSectionDomId(id: AdminSectionId) {
+  return `admin-${id}`;
+}
+
 function isAdminUser(user: User | null) {
   return user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
 }
@@ -157,6 +180,10 @@ export function AdminPanel() {
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelMessage, setPanelMessage] = useState<string | null>(null);
+  const [activeAdminSection, setActiveAdminSection] = useState<AdminSectionId>("details");
+  const [collapsedAdminSections, setCollapsedAdminSections] = useState<Set<AdminSectionId>>(
+    () => new Set(),
+  );
 
   const [newExperience, setNewExperience] = useState({
     company: "",
@@ -244,6 +271,79 @@ export function AdminPanel() {
       void loadAdminData();
     }
   }, [admin, loadAdminData]);
+
+  useEffect(() => {
+    if (!admin || typeof IntersectionObserver === "undefined") return;
+
+    const sections = ADMIN_SECTIONS.map((item) =>
+      document.getElementById(adminSectionDomId(item.id)),
+    ).filter((item): item is HTMLElement => Boolean(item));
+
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        const nextSection = visible?.target.getAttribute("data-admin-section") as
+          | AdminSectionId
+          | null
+          | undefined;
+
+        if (nextSection && ADMIN_SECTIONS.some((item) => item.id === nextSection)) {
+          setActiveAdminSection(nextSection);
+        }
+      },
+      {
+        rootMargin: "-18% 0px -68% 0px",
+        threshold: [0, 0.01, 0.15, 0.35],
+      },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [admin]);
+
+  function isAdminSectionCollapsed(id: AdminSectionId) {
+    return collapsedAdminSections.has(id);
+  }
+
+  function toggleAdminSection(id: AdminSectionId) {
+    setCollapsedAdminSections((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setAllAdminSections(collapsed: boolean) {
+    setCollapsedAdminSections(
+      collapsed ? new Set(ADMIN_SECTIONS.map((section) => section.id)) : new Set(),
+    );
+  }
+
+  function jumpToAdminSection(id: AdminSectionId) {
+    setActiveAdminSection(id);
+    setCollapsedAdminSections((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById(adminSectionDomId(id));
+      if (!section) return;
+
+      section.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1014,6 +1114,31 @@ export function AdminPanel() {
         </div>
       </header>
 
+      <nav className="admin-workspace-nav" aria-label="Admin sections">
+        <div className="admin-workspace-links">
+          {ADMIN_SECTIONS.map((section) => (
+            <button
+              className={`admin-workspace-link${activeAdminSection === section.id ? " is-active" : ""}`}
+              type="button"
+              key={section.id}
+              onClick={() => jumpToAdminSection(section.id)}
+              aria-current={activeAdminSection === section.id ? "location" : undefined}
+            >
+              <span>{section.number}</span>
+              {section.label}
+            </button>
+          ))}
+        </div>
+        <div className="admin-workspace-tools" aria-label="Section display controls">
+          <button className="admin-nav-action" type="button" onClick={() => setAllAdminSections(false)}>
+            Expand all
+          </button>
+          <button className="admin-nav-action" type="button" onClick={() => setAllAdminSections(true)}>
+            Collapse all
+          </button>
+        </div>
+      </nav>
+
       {panelMessage ? <p className="admin-global-message" role="status">{panelMessage}</p> : null}
       {panelBusy ? (
         <div className="admin-progress" role="status">
@@ -1021,13 +1146,25 @@ export function AdminPanel() {
         </div>
       ) : null}
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("details") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("details")}
+        data-admin-section="details"
+      >
         <div className="admin-section-heading">
           <div>
             <span>01</span>
             <h2>Portfolio details</h2>
           </div>
           <p>Name, introduction, about text, and contact details.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("details")}
+            aria-expanded={!isAdminSectionCollapsed("details")}
+          >
+            {isAdminSectionCollapsed("details") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <form className="admin-form admin-form-grid" onSubmit={saveSettings}>
@@ -1145,13 +1282,25 @@ export function AdminPanel() {
         </form>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("photo") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("photo")}
+        data-admin-section="photo"
+      >
         <div className="admin-section-heading">
           <div>
             <span>02</span>
             <h2>Profile photo</h2>
           </div>
           <p>JPG, PNG, or WebP. Maximum 2 MB.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("photo")}
+            aria-expanded={!isAdminSectionCollapsed("photo")}
+          >
+            {isAdminSectionCollapsed("photo") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <div className="admin-photo-editor">
@@ -1169,13 +1318,25 @@ export function AdminPanel() {
         </div>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("music") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("music")}
+        data-admin-section="music"
+      >
         <div className="admin-section-heading">
           <div>
             <span>03</span>
             <h2>Profile music</h2>
           </div>
           <p>Optional YouTube tracks for the profile control. If no enabled tracks exist, the public play button disappears automatically.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("music")}
+            aria-expanded={!isAdminSectionCollapsed("music")}
+          >
+            {isAdminSectionCollapsed("music") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <div className="admin-music-note">
@@ -1272,13 +1433,25 @@ export function AdminPanel() {
         </form>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("skills") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("skills")}
+        data-admin-section="skills"
+      >
         <div className="admin-section-heading">
           <div>
             <span>04</span>
             <h2>Interactive skills</h2>
           </div>
           <p>Add, describe, rename, reorder, hide, or remove skills. Public visitors see only enabled skills.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("skills")}
+            aria-expanded={!isAdminSectionCollapsed("skills")}
+          >
+            {isAdminSectionCollapsed("skills") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <div className="admin-skills-note">
@@ -1379,13 +1552,25 @@ export function AdminPanel() {
         </form>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("experience") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("experience")}
+        data-admin-section="experience"
+      >
         <div className="admin-section-heading">
           <div>
             <span>05</span>
             <h2>Work experience</h2>
           </div>
           <p>Add, edit, reorder numerically, or remove entries.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("experience")}
+            aria-expanded={!isAdminSectionCollapsed("experience")}
+          >
+            {isAdminSectionCollapsed("experience") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <div className="admin-experience-list">
@@ -1483,13 +1668,25 @@ export function AdminPanel() {
         </form>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("comments") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("comments")}
+        data-admin-section="comments"
+      >
         <div className="admin-section-heading">
           <div>
             <span>06</span>
             <h2>Visitor comments</h2>
           </div>
           <p>Newest active comments. Delete only when moderation is needed.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("comments")}
+            aria-expanded={!isAdminSectionCollapsed("comments")}
+          >
+            {isAdminSectionCollapsed("comments") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <div className="admin-comment-list">
@@ -1520,13 +1717,25 @@ export function AdminPanel() {
         </div>
       </section>
 
-      <section className="admin-section">
+      <section
+        className={`admin-section${isAdminSectionCollapsed("security") ? " is-collapsed" : ""}`}
+        id={adminSectionDomId("security")}
+        data-admin-section="security"
+      >
         <div className="admin-section-heading">
           <div>
             <span>07</span>
             <h2>Admin security</h2>
           </div>
           <p>Set or change the password attached to the authorized Supabase account.</p>
+          <button
+            className="admin-section-toggle"
+            type="button"
+            onClick={() => toggleAdminSection("security")}
+            aria-expanded={!isAdminSectionCollapsed("security")}
+          >
+            {isAdminSectionCollapsed("security") ? "Expand" : "Collapse"}
+          </button>
         </div>
 
         <form className="admin-form admin-password-form" onSubmit={updatePassword}>

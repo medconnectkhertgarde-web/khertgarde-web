@@ -537,3 +537,216 @@
     min-height: 0;
   }
 }
+
+
+/* Admin workspace navigation -------------------------------------------------
+   Lightweight quick navigation and collapsible sections. This stylesheet is
+   loaded only by the admin panel. */
+.admin-workspace-nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding: 0.5rem;
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.admin-workspace-links {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.admin-workspace-links::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-workspace-link,
+.admin-nav-action,
+.admin-section-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.admin-workspace-link {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  padding: 0.55rem 0.62rem;
+  font-size: 0.61rem;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.admin-workspace-link span {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  font-size: 0.56rem;
+}
+
+.admin-workspace-link:hover,
+.admin-workspace-link:focus-visible,
+.admin-workspace-link.is-active {
+  border-color: var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.admin-workspace-link.is-active span {
+  color: var(--foreground);
+}
+
+.admin-workspace-tools {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+}
+
+.admin-nav-action,
+.admin-section-toggle {
+  padding: 0.45rem 0.5rem;
+  font-size: 0.58rem;
+  white-space: nowrap;
+}
+
+.admin-nav-action:hover,
+.admin-nav-action:focus-visible,
+.admin-section-toggle:hover,
+.admin-section-toggle:focus-visible {
+  color: var(--foreground);
+}
+
+.admin-section {
+  scroll-margin-top: 5.25rem;
+}
+
+.admin-section-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 28rem) auto;
+  align-items: start;
+  gap: 1rem;
+}
+
+.admin-section-heading > div {
+  min-width: 0;
+}
+
+.admin-section-toggle {
+  align-self: start;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+}
+
+.admin-section.is-collapsed {
+  padding-block: 1rem;
+}
+
+.admin-section.is-collapsed > :not(.admin-section-heading) {
+  display: none !important;
+}
+
+.admin-section.is-collapsed .admin-section-heading {
+  margin-bottom: 0;
+}
+
+.admin-section.is-collapsed .admin-section-heading p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .admin-workspace-nav {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .admin-workspace-tools {
+    justify-content: flex-end;
+    padding-top: 0.35rem;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .admin-section {
+    scroll-margin-top: 7.75rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-workspace-nav {
+    margin-inline: -0.15rem;
+  }
+
+  .admin-section-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem 0.75rem;
+  }
+
+  .admin-section-heading > div {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .admin-section-heading > p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .admin-section-toggle {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .admin-section.is-collapsed .admin-section-heading p {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-workspace-nav {
+    top: 0;
+    padding: 0.4rem;
+  }
+
+  .admin-workspace-link {
+    padding: 0.5rem 0.55rem;
+    font-size: 0.58rem;
+  }
+
+  .admin-workspace-tools {
+    justify-content: space-between;
+  }
+
+  .admin-nav-action {
+    flex: 1 1 50%;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-workspace-link {
+    transition: none;
+  }
+}
