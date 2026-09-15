@@ -35,6 +35,10 @@ import {
   fetchPortfolioMusicTracks,
   type PortfolioMusicTrack,
 } from "@/lib/portfolio-music";
+import {
+  fetchPortfolioSkills,
+  type PortfolioSkill,
+} from "@/lib/portfolio-skills";
 import "@/admin.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
@@ -149,6 +153,7 @@ export function AdminPanel() {
   const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
   const [experiences, setExperiences] = useState<PortfolioExperience[]>([]);
   const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
+  const [skills, setSkills] = useState<PortfolioSkill[]>([]);
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelMessage, setPanelMessage] = useState<string | null>(null);
@@ -163,6 +168,12 @@ export function AdminPanel() {
   const [newMusic, setNewMusic] = useState({
     title: "",
     youtubeUrl: "",
+    sortOrder: 0,
+  });
+
+  const [newSkill, setNewSkill] = useState({
+    name: "",
+    description: "",
     sortOrder: 0,
   });
 
@@ -202,10 +213,11 @@ export function AdminPanel() {
     setPanelBusy(true);
     setPanelMessage(null);
 
-    const [nextSettings, nextExperiences, nextMusicTracks, commentsResult] = await Promise.all([
+    const [nextSettings, nextExperiences, nextMusicTracks, nextSkills, commentsResult] = await Promise.all([
       fetchPortfolioSettings(),
       fetchPortfolioExperiences(),
       fetchPortfolioMusicTracks({ includeDisabled: true }),
+      fetchPortfolioSkills({ includeDisabled: true }),
       supabase
         .from("portfolio_comments")
         .select("id, author_name, body, created_at")
@@ -216,6 +228,7 @@ export function AdminPanel() {
     setSettings(nextSettings);
     setExperiences(nextExperiences.filter((item) => !item.id.startsWith("default-")));
     setMusicTracks(nextMusicTracks);
+    setSkills(nextSkills.filter((item) => !item.id.startsWith("default-")));
 
     if (commentsResult.error) {
       setPanelMessage("Portfolio content loaded, but comments could not be loaded.");
@@ -599,6 +612,131 @@ export function AdminPanel() {
     setPanelBusy(false);
   }
 
+  function updateSkillLocal<K extends keyof PortfolioSkill>(
+    id: string,
+    field: K,
+    value: PortfolioSkill[K],
+  ) {
+    setSkills((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  }
+
+  async function addSkill(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !admin || panelBusy) return;
+
+    const name = newSkill.name.trim();
+    const description = newSkill.description.trim();
+    if (!name) {
+      setPanelMessage("Enter a skill name.");
+      return;
+    }
+
+    if (!description) {
+      setPanelMessage("Add a short description for the skill.");
+      return;
+    }
+
+    if (skills.length >= 30) {
+      setPanelMessage("The interactive graph is limited to 30 skills for smooth performance.");
+      return;
+    }
+
+    const nextOrder = skills.length
+      ? Math.max(...skills.map((item) => Number(item.sort_order) || 0)) + 10
+      : 10;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { data, error } = await supabase
+      .from("portfolio_skills")
+      .insert({
+        name,
+        description,
+        sort_order: Number(newSkill.sortOrder) || nextOrder,
+        is_enabled: true,
+      })
+      .select("id, name, description, sort_order, is_enabled, created_at, updated_at")
+      .single();
+
+    if (error || !data) {
+      setPanelMessage(
+        error?.code === "23505"
+          ? "That skill is already in the portfolio."
+          : "The skill could not be added.",
+      );
+    } else {
+      setSkills((items) => [...items, data as PortfolioSkill]);
+      setNewSkill({ name: "", description: "", sortOrder: 0 });
+      setPanelMessage("Skill added.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function saveSkill(item: PortfolioSkill) {
+    if (!supabase || !admin || panelBusy) return;
+
+    const name = item.name.trim();
+    const description = item.description.trim();
+    if (!name) {
+      setPanelMessage("Skill names cannot be empty.");
+      return;
+    }
+
+    if (!description) {
+      setPanelMessage("Skill descriptions cannot be empty.");
+      return;
+    }
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const payload = {
+      name,
+      description,
+      sort_order: Number(item.sort_order) || 0,
+      is_enabled: Boolean(item.is_enabled),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("portfolio_skills").update(payload).eq("id", item.id);
+
+    if (error) {
+      setPanelMessage(
+        error.code === "23505" ? "That skill already exists." : "The skill could not be saved.",
+      );
+    } else {
+      setSkills((items) =>
+        items.map((skill) => (skill.id === item.id ? { ...skill, ...payload } : skill)),
+      );
+      setPanelMessage("Skill saved.");
+    }
+
+    setPanelBusy(false);
+  }
+
+  async function deleteSkill(id: string) {
+    if (!supabase || !admin || panelBusy) return;
+    if (!window.confirm("Remove this skill from the portfolio?")) return;
+
+    setPanelBusy(true);
+    setPanelMessage(null);
+
+    const { error } = await supabase.from("portfolio_skills").delete().eq("id", id);
+
+    if (error) {
+      setPanelMessage("The skill could not be removed.");
+    } else {
+      setSkills((items) => items.filter((item) => item.id !== id));
+      setPanelMessage("Skill removed.");
+    }
+
+    setPanelBusy(false);
+  }
+
   async function uploadProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -699,6 +837,10 @@ export function AdminPanel() {
   const sortedMusicTracks = useMemo(
     () => [...musicTracks].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)),
     [musicTracks],
+  );
+  const sortedSkills = useMemo(
+    () => [...skills].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)),
+    [skills],
   );
 
   if (!isSupabaseConfigured || !supabase) {
@@ -1134,6 +1276,113 @@ export function AdminPanel() {
         <div className="admin-section-heading">
           <div>
             <span>04</span>
+            <h2>Interactive skills</h2>
+          </div>
+          <p>Add, describe, rename, reorder, hide, or remove skills. Public visitors see only enabled skills.</p>
+        </div>
+
+        <div className="admin-skills-note">
+          The public graph is capped at 30 nodes and pauses animation when off-screen to keep it responsive. Skill descriptions appear when a visitor hovers, touches, or drags a node.
+        </div>
+
+        <div className="admin-skills-list">
+          {sortedSkills.map((skill) => (
+            <article className="admin-skill-card" key={skill.id}>
+              <div className="admin-form admin-skill-grid">
+                <label>
+                  Skill name
+                  <input
+                    value={skill.name}
+                    onChange={(event) => updateSkillLocal(skill.id, "name", event.target.value)}
+                    maxLength={64}
+                    required
+                  />
+                </label>
+                <label className="admin-field-wide">
+                  Skill description
+                  <textarea
+                    value={skill.description}
+                    onChange={(event) => updateSkillLocal(skill.id, "description", event.target.value)}
+                    rows={3}
+                    maxLength={320}
+                    placeholder="Briefly explain what this skill means in your work."
+                    required
+                  />
+                </label>
+                <label>
+                  Display order
+                  <input
+                    type="number"
+                    value={skill.sort_order}
+                    onChange={(event) => updateSkillLocal(skill.id, "sort_order", Number(event.target.value))}
+                  />
+                </label>
+                <label className="admin-checkbox-label admin-skill-enabled">
+                  <input
+                    type="checkbox"
+                    checked={skill.is_enabled}
+                    onChange={(event) => updateSkillLocal(skill.id, "is_enabled", event.target.checked)}
+                  />
+                  <span>Visible on public portfolio</span>
+                </label>
+              </div>
+
+              <div className="admin-card-actions">
+                <button className="button button-primary" type="button" onClick={() => void saveSkill(skill)} disabled={panelBusy}>
+                  <Save aria-hidden="true" /> Save
+                </button>
+                <button className="button button-outline admin-danger-button" type="button" onClick={() => void deleteSkill(skill.id)} disabled={panelBusy}>
+                  <Trash2 aria-hidden="true" /> Delete
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <form className="admin-new-experience admin-skill-add" onSubmit={addSkill}>
+          <h3>Add skill</h3>
+          <div className="admin-form admin-form-grid">
+            <label>
+              Skill name
+              <input
+                value={newSkill.name}
+                onChange={(event) => setNewSkill((current) => ({ ...current, name: event.target.value }))}
+                maxLength={64}
+                placeholder="e.g. Technical Support"
+                required
+              />
+            </label>
+            <label className="admin-field-wide">
+              Skill description
+              <textarea
+                value={newSkill.description}
+                onChange={(event) => setNewSkill((current) => ({ ...current, description: event.target.value }))}
+                rows={3}
+                maxLength={320}
+                placeholder="Briefly explain what this skill means in your work."
+                required
+              />
+            </label>
+            <label>
+              Display order (optional)
+              <input
+                type="number"
+                value={newSkill.sortOrder || ""}
+                onChange={(event) => setNewSkill((current) => ({ ...current, sortOrder: Number(event.target.value) || 0 }))}
+                placeholder="Auto"
+              />
+            </label>
+          </div>
+          <button className="button button-primary" type="submit" disabled={panelBusy || !newSkill.name.trim() || !newSkill.description.trim() || skills.length >= 30}>
+            <Plus aria-hidden="true" /> Add skill
+          </button>
+        </form>
+      </section>
+
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <span>05</span>
             <h2>Work experience</h2>
           </div>
           <p>Add, edit, reorder numerically, or remove entries.</p>
@@ -1237,7 +1486,7 @@ export function AdminPanel() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <span>05</span>
+            <span>06</span>
             <h2>Visitor comments</h2>
           </div>
           <p>Newest active comments. Delete only when moderation is needed.</p>
@@ -1274,7 +1523,7 @@ export function AdminPanel() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <span>06</span>
+            <span>07</span>
             <h2>Admin security</h2>
           </div>
           <p>Set or change the password attached to the authorized Supabase account.</p>

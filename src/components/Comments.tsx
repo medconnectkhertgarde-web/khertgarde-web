@@ -262,7 +262,7 @@ export function Comments() {
       <div className="section-heading-row comments-heading-row">
         <div>
           <h2 id="comments-heading" className="section-label">
-            05 — Comments
+            06 {"\u2014"} Comments
           </h2>
           <p className="comments-intro">Thoughts, feedback, and notes from visitors.</p>
         </div>

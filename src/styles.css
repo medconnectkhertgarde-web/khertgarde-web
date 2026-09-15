@@ -1250,3 +1250,217 @@ svg {
     animation: none;
   }
 }
+
+/* Interactive skills graph -------------------------------------------------- */
+.skills-section {
+  position: relative;
+}
+
+.skills-heading-row {
+  align-items: flex-start;
+}
+
+.skills-intro {
+  max-width: 42rem;
+  margin: 0.65rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.skills-graph-shell {
+  position: relative;
+  width: 100%;
+  height: clamp(24rem, 52vw, 32rem);
+  min-height: 24rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px),
+    var(--background);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  isolation: isolate;
+}
+
+.skills-graph-shell::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 25%, var(--background) 100%);
+  opacity: 0.26;
+  content: "";
+}
+
+.skills-graph-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+}
+
+.skills-graph-canvas.is-hovering {
+  cursor: grab;
+}
+
+.skills-graph-canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.skills-graph-hint {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.7rem;
+  z-index: 2;
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  padding: 0.38rem 0.5rem;
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.56rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.skills-graph-skeleton {
+  background: var(--muted);
+}
+
+.skills-skeleton-node {
+  position: absolute;
+  width: 8.5rem;
+  height: 2.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+}
+
+.skills-skeleton-node-a {
+  top: 21%;
+  left: 18%;
+}
+
+.skills-skeleton-node-b {
+  top: 38%;
+  left: 47%;
+  width: 10rem;
+}
+
+.skills-skeleton-node-c {
+  top: 63%;
+  left: 28%;
+  width: 9.25rem;
+}
+
+.skills-skeleton-node-d {
+  top: 24%;
+  right: 13%;
+  width: 7.6rem;
+}
+
+.skills-skeleton-node-e {
+  right: 20%;
+  bottom: 17%;
+  width: 11rem;
+}
+
+@media (max-width: 800px) {
+  .skills-graph-shell {
+    height: clamp(22rem, 76vw, 28rem);
+    min-height: 22rem;
+    background-size: 40px 40px;
+  }
+}
+
+@media (max-width: 520px) {
+  .skills-graph-shell {
+    height: 23rem;
+    min-height: 23rem;
+  }
+
+  .skills-graph-hint {
+    right: 0.55rem;
+    bottom: 0.5rem;
+    font-size: 0.5rem;
+  }
+
+  .skills-intro {
+    font-size: 0.82rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-graph-shell .skeleton-block {
+    animation: none;
+  }
+}
+
+/* Interactive skill descriptions ------------------------------------------ */
+.skills-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  width: max-content;
+  max-width: min(20rem, calc(100% - 1.5rem));
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--header-bg);
+  padding: 0.72rem 0.78rem 0.76rem;
+  box-shadow: 0 0.7rem 2rem rgb(0 0 0 / 10%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform, opacity;
+  transition: opacity 120ms ease, visibility 120ms ease;
+  backdrop-filter: blur(10px);
+}
+
+.skills-tooltip.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.skills-tooltip-title {
+  display: block;
+  color: var(--foreground);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.skills-tooltip-description {
+  max-width: 18rem;
+  margin: 0.42rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 520px) {
+  .skills-tooltip {
+    max-width: calc(100% - 1rem);
+    padding: 0.65rem 0.7rem 0.68rem;
+  }
+
+  .skills-tooltip-description {
+    font-size: 0.72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-tooltip {
+    transition: none;
+  }
+}

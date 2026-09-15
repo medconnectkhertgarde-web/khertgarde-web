@@ -488,3 +488,52 @@
   font-size: 0.64rem;
   text-transform: uppercase;
 }
+
+/* Interactive skill administration ----------------------------------------- */
+.admin-skills-note {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  padding: 0.8rem 0.9rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.admin-skills-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.admin-skill-card {
+  border: 1px solid var(--border);
+  background: var(--muted);
+  padding: 1rem;
+}
+
+.admin-skill-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem auto;
+  align-items: end;
+  gap: 0.9rem;
+}
+
+.admin-skill-enabled {
+  min-height: 2.7rem;
+  align-self: end;
+}
+
+.admin-skill-add {
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 760px) {
+  .admin-skill-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .admin-skill-enabled {
+    min-height: 0;
+  }
+}

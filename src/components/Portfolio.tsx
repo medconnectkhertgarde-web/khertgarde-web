@@ -4,6 +4,7 @@ import { ArrowDown, Mail, Menu, Moon, Phone, Sun, X } from "lucide-react";
 import { ClinicalStudies } from "@/components/ClinicalStudies";
 import { Comments } from "@/components/Comments";
 import { ProfileMusic } from "@/components/ProfileMusic";
+import { SkillsGraph } from "@/components/SkillsGraph";
 import {
   DEFAULT_EXPERIENCES,
   DEFAULT_PORTFOLIO_SETTINGS,
@@ -14,11 +15,13 @@ import {
   type PortfolioSettings,
 } from "@/lib/portfolio-content";
 import { fetchPortfolioMusicTracks, type PortfolioMusicTrack } from "@/lib/portfolio-music";
+import { fetchPortfolioSkills, type PortfolioSkill } from "@/lib/portfolio-skills";
 import { updatePortfolioSeo } from "@/lib/seo";
 
 const navItems = [
   ["About", "about"],
   ["Experience", "experience"],
+  ["Skills", "skills"],
   ["Clinical studies", "clinical-studies"],
   ["Contact", "contact"],
   ["Comments", "comments"],
@@ -255,7 +258,7 @@ function Contact({ settings }: { settings: PortfolioSettings }) {
 
   return (
     <section id="contact" className="section split-section contact-section" aria-labelledby="contact-heading">
-      <SectionHeading number="04" id="contact-heading">
+      <SectionHeading number="05" id="contact-heading">
         Contact
       </SectionHeading>
 
@@ -300,6 +303,8 @@ export function Portfolio() {
   const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
   const [experiences, setExperiences] = useState<PortfolioExperience[]>(DEFAULT_EXPERIENCES);
   const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
+  const [skills, setSkills] = useState<PortfolioSkill[]>([]);
+  const [skillsResolved, setSkillsResolved] = useState(false);
   const [settingsResolved, setSettingsResolved] = useState(false);
 
   useEffect(() => {
@@ -318,6 +323,16 @@ export function Portfolio() {
       if (!cancelled) setMusicTracks(nextMusicTracks);
     });
 
+    void fetchPortfolioSkills()
+      .then((nextSkills) => {
+        if (cancelled) return;
+        setSkills(nextSkills);
+        setSkillsResolved(true);
+      })
+      .catch(() => {
+        if (!cancelled) setSkillsResolved(true);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -334,6 +349,7 @@ export function Portfolio() {
         <Hero settings={settings} settingsResolved={settingsResolved} musicTracks={musicTracks} />
         <About settings={settings} />
         <Experience experiences={experiences} />
+        <SkillsGraph skills={skills} loading={!skillsResolved} />
         <ClinicalStudies />
         <Contact settings={settings} />
         <Comments />

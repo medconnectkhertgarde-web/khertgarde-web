@@ -359,7 +359,7 @@ export function ClinicalStudies() {
     <section id="clinical-studies" className="section clinical-section" aria-labelledby="studies-heading">
       <div className="section-heading-row">
         <h2 id="studies-heading" className="section-label">
-          03 — Recent clinical studies
+          04 {"\u2014"} Recent clinical studies
         </h2>
         <span className="section-note">Published work</span>
       </div>
