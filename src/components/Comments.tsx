@@ -73,11 +73,28 @@ function Avatar({ name, src }: { name: string; src: string | null }) {
   );
 }
 
+function CommentSkeleton() {
+  return (
+    <div className="comment-item comment-item-skeleton" aria-hidden="true">
+      <span className="skeleton-block comment-avatar-skeleton" />
+      <div className="comment-skeleton-content">
+        <div className="comment-skeleton-meta">
+          <span className="skeleton-block comment-skeleton-name" />
+          <span className="skeleton-block comment-skeleton-date" />
+        </div>
+        <span className="skeleton-block comment-skeleton-line" />
+        <span className="skeleton-block comment-skeleton-line comment-skeleton-line-short" />
+      </div>
+    </div>
+  );
+}
+
 export function Comments() {
   const supabase = getSupabaseClient();
   const [comments, setComments] = useState<PortfolioComment[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [user, setUser] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
   const [body, setBody] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [submitBusy, setSubmitBusy] = useState(false);
@@ -118,6 +135,7 @@ export function Comments() {
 
     void supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
+      setAuthResolved(true);
 
       if (data.session?.user && window.sessionStorage.getItem(AUTH_RETURN_KEY) === "1") {
         window.sessionStorage.removeItem(AUTH_RETURN_KEY);
@@ -131,6 +149,7 @@ export function Comments() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      setAuthResolved(true);
     });
 
     return () => subscription.unsubscribe();
@@ -257,7 +276,19 @@ export function Comments() {
       ) : (
         <>
           <div className="comment-composer">
-            {user ? (
+            {!authResolved ? (
+              <div className="comment-auth-skeleton" role="status" aria-live="polite">
+                <span className="sr-only">Checking comment sign-in status</span>
+                <div className="comment-account" aria-hidden="true">
+                  <span className="skeleton-block comment-avatar-skeleton" />
+                  <div className="comment-auth-skeleton-copy">
+                    <span className="skeleton-block comment-auth-line" />
+                    <span className="skeleton-block comment-auth-line comment-auth-line-short" />
+                  </div>
+                </div>
+                <span className="skeleton-block comment-auth-button" aria-hidden="true" />
+              </div>
+            ) : user ? (
               <>
                 <div className="comment-account-row">
                   <div className="comment-account">
@@ -313,9 +344,11 @@ export function Comments() {
 
           <div className="comment-list" aria-live="polite">
             {loadState === "loading" ? (
-              <div className="comments-state" role="status">
-                <LoaderCircle className="spin" aria-hidden="true" />
-                Loading comments
+              <div className="comment-skeleton-list" role="status" aria-live="polite">
+                <span className="sr-only">Loading comments</span>
+                <CommentSkeleton />
+                <CommentSkeleton />
+                <CommentSkeleton />
               </div>
             ) : null}
 

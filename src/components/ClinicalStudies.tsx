@@ -3,7 +3,7 @@ import {
   ArrowDownToLine,
   ArrowUpRight,
   FileText,
-  LoaderCircle,
+  RefreshCw,
   X,
 } from "lucide-react";
 
@@ -41,6 +41,26 @@ function formatDate(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function StudyCardSkeleton() {
+  return (
+    <article className="study-card study-card-skeleton" aria-hidden="true">
+      <div className="study-skeleton-meta">
+        <span className="skeleton-block skeleton-meta-line" />
+        <span className="skeleton-block skeleton-meta-line skeleton-meta-line-short" />
+      </div>
+      <div className="study-skeleton-copy">
+        <span className="skeleton-block skeleton-title-line" />
+        <span className="skeleton-block skeleton-copy-line" />
+        <span className="skeleton-block skeleton-copy-line skeleton-copy-line-short" />
+      </div>
+      <div className="study-skeleton-actions">
+        <span className="skeleton-block skeleton-button" />
+        <span className="skeleton-block skeleton-button" />
+      </div>
+    </article>
+  );
 }
 
 function StudyCard({ study, onView }: { study: ClinicalStudy; onView: () => void }) {
@@ -203,17 +223,26 @@ function StudyViewer({ study, onClose }: { study: ClinicalStudy; onClose: () => 
           {study.preview_url ? (
             <>
               {!loaded ? (
-                <div className="viewer-loading" role="status">
-                  <LoaderCircle className="spin" aria-hidden="true" />
-                  <span>
+                <div className="viewer-loading viewer-loading-skeleton" role="status">
+                  <span className="sr-only">
                     {slow
                       ? "The Google Drive preview is taking longer than usual."
                       : "Loading study viewer"}
                   </span>
+                  <div className="viewer-skeleton-document" aria-hidden="true">
+                    <span className="skeleton-block viewer-skeleton-heading" />
+                    <span className="skeleton-block viewer-skeleton-line" />
+                    <span className="skeleton-block viewer-skeleton-line" />
+                    <span className="skeleton-block viewer-skeleton-line viewer-skeleton-line-short" />
+                    <span className="skeleton-block viewer-skeleton-block" />
+                  </div>
                   {slow ? (
-                    <a href={study.view_url} target="_blank" rel="noopener noreferrer">
-                      Open directly in Google Drive
-                    </a>
+                    <div className="viewer-slow-note">
+                      <span>The Google Drive preview is taking longer than usual.</span>
+                      <a href={study.view_url} target="_blank" rel="noopener noreferrer">
+                        Open directly in Google Drive
+                      </a>
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -242,40 +271,89 @@ function StudyViewer({ study, onClose }: { study: ClinicalStudy; onClose: () => 
   );
 }
 
+async function readStudiesResponse(response: Response): Promise<ClinicalStudy[]> {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(`Study API returned a non-JSON response (HTTP ${response.status}).`);
+  }
+
+  const payload = (await response.json()) as StudiesApiResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.error || `Study API returned HTTP ${response.status}`);
+  }
+
+  if (!Array.isArray(payload.studies)) {
+    throw new Error("Study API returned an invalid response.");
+  }
+
+  return payload.studies;
+}
+
 export function ClinicalStudies() {
   const [state, setState] = useState<StudiesState>({ status: "loading", studies: [] });
   const [selectedStudy, setSelectedStudy] = useState<ClinicalStudy | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    let retryTimer: number | null = null;
+
+    const requestStudies = async () => {
+      const response = await fetch("/api/studies", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      return readStudiesResponse(response);
+    };
 
     async function loadStudies() {
+      setState({ status: "loading", studies: [] });
+
       try {
-        const response = await fetch("/api/studies", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
+        const studies = await requestStudies();
+        if (!controller.signal.aborted) {
+          setState({ status: "ready", studies });
+        }
+        return;
+      } catch (firstError) {
+        if (controller.signal.aborted) return;
+
+        // A single short retry absorbs transient local/Vercel/Drive startup failures
+        // without creating polling or meaningful extra resource usage.
+        await new Promise<void>((resolve) => {
+          retryTimer = window.setTimeout(resolve, 700);
         });
 
-        const payload = (await response.json()) as StudiesApiResponse;
-
-        if (!response.ok) {
-          throw new Error(payload.error || `Study API returned HTTP ${response.status}`);
-        }
-
-        setState({ status: "ready", studies: payload.studies ?? [] });
-      } catch (error) {
         if (controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Unknown study loading error";
-        console.error("Unable to load clinical studies:", message);
-        setState({ status: "error", studies: [] });
+
+        try {
+          const studies = await requestStudies();
+          if (!controller.signal.aborted) {
+            setState({ status: "ready", studies });
+          }
+          return;
+        } catch (secondError) {
+          if (controller.signal.aborted) return;
+          const error = secondError instanceof Error ? secondError : firstError;
+          const message = error instanceof Error ? error.message : "Unknown study loading error";
+          console.error("Unable to load clinical studies:", message);
+          setState({ status: "error", studies: [] });
+        }
       }
     }
 
     void loadStudies();
 
-    return () => controller.abort();
-  }, []);
+    return () => {
+      controller.abort();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
+  }, [retryKey]);
 
   return (
     <section id="clinical-studies" className="section clinical-section" aria-labelledby="studies-heading">
@@ -287,15 +365,25 @@ export function ClinicalStudies() {
       </div>
 
       {state.status === "loading" ? (
-        <div className="studies-state" role="status">
-          <LoaderCircle className="spin" aria-hidden="true" />
-          Loading clinical studies
+        <div className="study-skeleton-list" role="status" aria-live="polite">
+          <span className="sr-only">Loading clinical studies</span>
+          <StudyCardSkeleton />
+          <StudyCardSkeleton />
+          <StudyCardSkeleton />
         </div>
       ) : null}
 
       {state.status === "error" ? (
         <div className="studies-state" role="status">
-          Clinical studies are temporarily unavailable.
+          <span>Clinical studies are temporarily unavailable.</span>
+          <button
+            className="button button-outline"
+            type="button"
+            onClick={() => setRetryKey((value) => value + 1)}
+          >
+            <RefreshCw aria-hidden="true" />
+            Retry
+          </button>
         </div>
       ) : null}
 

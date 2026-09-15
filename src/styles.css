@@ -1066,3 +1066,187 @@ svg {
     transition: none;
   }
 }
+
+/* Lightweight loading skeletons ---------------------------------------------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.skeleton-block {
+  display: block;
+  overflow: hidden;
+  border-radius: 0.2rem;
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--muted) 34%,
+    var(--border) 50%,
+    var(--muted) 66%,
+    var(--muted) 100%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 110% 0; }
+  to { background-position: -110% 0; }
+}
+
+.profile-image-loading {
+  position: relative;
+  background: var(--muted);
+}
+
+.profile-image-loading::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    rgb(255 255 255 / 0.12) 42%,
+    transparent 56%
+  );
+  background-size: 220% 100%;
+  content: "";
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.profile-image-loading span {
+  opacity: 0;
+}
+
+.study-skeleton-list {
+  border-bottom: 1px solid var(--border);
+}
+
+.study-card-skeleton {
+  pointer-events: none;
+}
+
+.study-skeleton-meta,
+.study-skeleton-copy,
+.study-skeleton-actions {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.study-skeleton-actions {
+  grid-template-columns: repeat(2, 5.7rem);
+}
+
+.skeleton-meta-line {
+  width: 6.5rem;
+  height: 0.62rem;
+}
+
+.skeleton-meta-line-short {
+  width: 4.2rem;
+}
+
+.skeleton-title-line {
+  width: min(100%, 22rem);
+  height: 1.05rem;
+}
+
+.skeleton-copy-line {
+  width: min(100%, 34rem);
+  height: 0.72rem;
+}
+
+.skeleton-copy-line-short {
+  width: min(72%, 24rem);
+}
+
+.skeleton-button {
+  width: 5.7rem;
+  height: 2.25rem;
+}
+
+.viewer-loading-skeleton {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 1rem;
+  text-align: left;
+}
+
+.viewer-skeleton-document {
+  display: grid;
+  width: min(100%, 44rem);
+  margin: 1.5rem auto 0;
+  gap: 1rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.viewer-skeleton-heading {
+  width: 56%;
+  height: 1.2rem;
+  margin-bottom: 0.4rem;
+}
+
+.viewer-skeleton-line {
+  width: 100%;
+  height: 0.72rem;
+}
+
+.viewer-skeleton-line-short {
+  width: 72%;
+}
+
+.viewer-skeleton-block {
+  width: 100%;
+  height: clamp(7rem, 22vh, 12rem);
+  margin-top: 0.6rem;
+}
+
+.viewer-slow-note {
+  display: flex;
+  width: min(100%, 44rem);
+  margin: 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.viewer-slow-note a {
+  flex: 0 0 auto;
+  color: var(--foreground);
+}
+
+@media (max-width: 760px) {
+  .study-skeleton-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-button {
+    width: 100%;
+  }
+
+  .viewer-skeleton-document {
+    margin-top: 0;
+  }
+
+  .viewer-slow-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block,
+  .profile-image-loading::before {
+    animation: none;
+  }
+}

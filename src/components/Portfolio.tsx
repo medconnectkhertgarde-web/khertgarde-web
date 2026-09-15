@@ -14,6 +14,7 @@ import {
   type PortfolioSettings,
 } from "@/lib/portfolio-content";
 import { fetchPortfolioMusicTracks, type PortfolioMusicTrack } from "@/lib/portfolio-music";
+import { updatePortfolioSeo } from "@/lib/seo";
 
 const navItems = [
   ["About", "about"],
@@ -323,8 +324,8 @@ export function Portfolio() {
   }, []);
 
   useEffect(() => {
-    document.title = `${settings.display_name} — ${settings.role_primary}`;
-  }, [settings.display_name, settings.role_primary]);
+    updatePortfolioSeo(settings);
+  }, [settings]);
 
   return (
     <>

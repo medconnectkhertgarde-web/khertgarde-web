@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#faf9f6" />
+    <meta name="color-scheme" content="light dark" />
     <script>
       try {
         const savedTheme = localStorage.getItem("khert-theme");
@@ -11,18 +12,86 @@
         document.documentElement.classList.toggle("dark", savedTheme ? savedTheme === "dark" : prefersDark);
       } catch {}
     </script>
-    <meta name="author" content="Khert Laguna Garde" />
+
+    <title>Khert Laguna Garde | Independent Researcher in Medicine &amp; Clinical Studies</title>
     <meta
       name="description"
-      content="Portfolio of Khert Laguna Garde, an independent researcher focused on medicine and clinical studies."
+      content="Portfolio of Khert Laguna Garde, an independent researcher focused on medicine and clinical studies, featuring clinical study guides, professional experience, and contact information."
     />
-    <meta property="og:title" content="Khert Laguna Garde — Independent Researcher" />
+    <meta name="author" content="Khert Laguna Garde" />
+    <meta name="application-name" content="Khert Laguna Garde Portfolio" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://khertgarde.vercel.app/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Khert Laguna Garde Portfolio" />
+    <meta property="og:locale" content="en_PH" />
+    <meta property="og:url" content="https://khertgarde.vercel.app/" />
+    <meta property="og:title" content="Khert Laguna Garde | Independent Researcher" />
     <meta
       property="og:description"
-      content="Portfolio of Khert Laguna Garde, an independent researcher focused on medicine and clinical studies."
+      content="Independent researcher focused on medicine and clinical studies. Explore clinical study guides, professional experience, and contact information."
     />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://khertgarde.vercel.app/og-khertgarde-v1.png" />
+    <meta property="og:image:secure_url" content="https://khertgarde.vercel.app/og-khertgarde-v1.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Khert Laguna Garde — Independent Researcher portfolio preview" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Khert Laguna Garde | Independent Researcher" />
+    <meta
+      name="twitter:description"
+      content="Independent researcher focused on medicine and clinical studies. Explore clinical study guides, professional experience, and contact information."
+    />
+    <meta name="twitter:image" content="https://khertgarde.vercel.app/og-khertgarde-v1.png" />
+    <meta name="twitter:image:alt" content="Khert Laguna Garde — Independent Researcher portfolio preview" />
+
+    <script id="khert-structured-data" type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://khertgarde.vercel.app/#website",
+            "url": "https://khertgarde.vercel.app/",
+            "name": "Khert Laguna Garde Portfolio",
+            "alternateName": "Khert Garde Portfolio",
+            "description": "Portfolio of Khert Laguna Garde, an independent researcher focused on medicine and clinical studies.",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "ProfilePage",
+            "@id": "https://khertgarde.vercel.app/#profile-page",
+            "url": "https://khertgarde.vercel.app/",
+            "name": "Khert Laguna Garde — Independent Researcher",
+            "description": "Portfolio of Khert Laguna Garde, an independent researcher focused on medicine and clinical studies.",
+            "isPartOf": {
+              "@id": "https://khertgarde.vercel.app/#website"
+            },
+            "mainEntity": {
+              "@id": "https://khertgarde.vercel.app/#person"
+            }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://khertgarde.vercel.app/#person",
+            "name": "Khert Laguna Garde",
+            "url": "https://khertgarde.vercel.app/",
+            "jobTitle": "Independent Researcher",
+            "description": "Independent researcher focused on medicine and clinical studies.",
+            "knowsAbout": [
+              "Medicine",
+              "Clinical studies"
+            ]
+          }
+        ]
+      }
+    </script>
+
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,7 +99,6 @@
       href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <title>Khert Laguna Garde — Independent Researcher</title>
   </head>
   <body>
     <div id="root"></div>

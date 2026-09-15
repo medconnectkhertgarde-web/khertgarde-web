@@ -1,2 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://khertgarde.vercel.app/sitemap.xml
