@@ -48,7 +48,9 @@ import {
   fetchPortfolioStatus,
   type PortfolioStatus,
 } from "@/lib/portfolio-status";
+import { AdminStats } from "@/components/AdminStats";
 import "@/admin.css";
+import "@/admin-pages.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
 const PROFILE_BUCKET = "portfolio-assets";
@@ -70,7 +72,8 @@ type AdminSectionId =
   | "current-work"
   | "experience"
   | "comments"
-  | "security";
+  | "security"
+  | "stats";
 
 const ADMIN_SECTIONS: Array<{ id: AdminSectionId; number: string; label: string }> = [
   { id: "details", number: "01", label: "Details" },
@@ -81,6 +84,7 @@ const ADMIN_SECTIONS: Array<{ id: AdminSectionId; number: string; label: string 
   { id: "experience", number: "06", label: "Experience" },
   { id: "comments", number: "07", label: "Comments" },
   { id: "security", number: "08", label: "Security" },
+  { id: "stats", number: "09", label: "Stats" },
 ];
 
 function adminSectionDomId(id: AdminSectionId) {
@@ -1262,6 +1266,12 @@ export function AdminPanel() {
         </div>
       </nav>
 
+      <div className="admin-page-context" aria-live="polite">
+        <span>ADMIN PAGE</span>
+        <strong>{ADMIN_SECTIONS.find((section) => section.id === activeAdminSection)?.label}</strong>
+        <span>{ADMIN_SECTIONS.findIndex((section) => section.id === activeAdminSection) + 1} / {ADMIN_SECTIONS.length}</span>
+      </div>
+
       {panelMessage ? <p className="admin-global-message" role="status">{panelMessage}</p> : null}
       {panelBusy ? (
         <div className="admin-progress" role="status">
@@ -1270,7 +1280,7 @@ export function AdminPanel() {
       ) : null}
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("details") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "details" ? " is-active" : ""}`}
         id={adminSectionDomId("details")}
         data-admin-section="details"
       >
@@ -1429,7 +1439,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("photo") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "photo" ? " is-active" : ""}`}
         id={adminSectionDomId("photo")}
         data-admin-section="photo"
       >
@@ -1465,7 +1475,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("music") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "music" ? " is-active" : ""}`}
         id={adminSectionDomId("music")}
         data-admin-section="music"
       >
@@ -1580,7 +1590,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("skills") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "skills" ? " is-active" : ""}`}
         id={adminSectionDomId("skills")}
         data-admin-section="skills"
       >
@@ -1699,7 +1709,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section admin-current-work-section${isAdminSectionCollapsed("current-work") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-current-work-section admin-page-section${activeAdminSection === "current-work" ? " is-active" : ""}`}
         id={adminSectionDomId("current-work")}
         data-admin-section="current-work"
       >
@@ -1777,7 +1787,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("experience") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "experience" ? " is-active" : ""}`}
         id={adminSectionDomId("experience")}
         data-admin-section="experience"
       >
@@ -1893,7 +1903,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("comments") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "comments" ? " is-active" : ""}`}
         id={adminSectionDomId("comments")}
         data-admin-section="comments"
       >
@@ -1942,7 +1952,7 @@ export function AdminPanel() {
       </section>
 
       <section
-        className={`admin-section${isAdminSectionCollapsed("security") ? " is-collapsed" : ""}`}
+        className={`admin-section admin-page-section${activeAdminSection === "security" ? " is-active" : ""}`}
         id={adminSectionDomId("security")}
         data-admin-section="security"
       >
@@ -1990,6 +2000,22 @@ export function AdminPanel() {
         </form>
 
         {authMessage ? <p className="admin-message" role="status">{authMessage}</p> : null}
+      </section>
+
+      <section
+        className={`admin-section admin-page-section${activeAdminSection === "stats" ? " is-active" : ""}`}
+        id={adminSectionDomId("stats")}
+        data-admin-section="stats"
+      >
+        <div className="admin-section-heading">
+          <div>
+            <span>09</span>
+            <h2>Portfolio stats</h2>
+          </div>
+          <p>Live Supabase-backed health and content statistics. No estimated or fabricated metrics.</p>
+        </div>
+
+        <AdminStats active={activeAdminSection === "stats"} />
       </section>
     </main>
   );
