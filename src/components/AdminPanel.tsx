@@ -43,6 +43,11 @@ import {
   fetchPortfolioCurrentWork,
   type PortfolioCurrentWorkItem,
 } from "@/lib/portfolio-current-work";
+import {
+  EMPTY_PORTFOLIO_STATUS,
+  fetchPortfolioStatus,
+  type PortfolioStatus,
+} from "@/lib/portfolio-status";
 import "@/admin.css";
 
 const ADMIN_EMAIL = "medconnect.khertgarde@gmail.com";
@@ -184,6 +189,7 @@ export function AdminPanel() {
   const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
   const [skills, setSkills] = useState<PortfolioSkill[]>([]);
   const [currentWork, setCurrentWork] = useState<PortfolioCurrentWorkItem[]>([]);
+  const [portfolioStatus, setPortfolioStatus] = useState<PortfolioStatus>(EMPTY_PORTFOLIO_STATUS);
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelMessage, setPanelMessage] = useState<string | null>(null);
@@ -249,12 +255,21 @@ export function AdminPanel() {
     setPanelBusy(true);
     setPanelMessage(null);
 
-    const [nextSettings, nextExperiences, nextMusicTracks, nextSkills, nextCurrentWork, commentsResult] = await Promise.all([
+    const [
+      nextSettings,
+      nextExperiences,
+      nextMusicTracks,
+      nextSkills,
+      nextCurrentWork,
+      nextPortfolioStatus,
+      commentsResult,
+    ] = await Promise.all([
       fetchPortfolioSettings(),
       fetchPortfolioExperiences(),
       fetchPortfolioMusicTracks({ includeDisabled: true }),
       fetchPortfolioSkills({ includeDisabled: true }),
       fetchPortfolioCurrentWork({ includeHidden: true, limit: 100 }),
+      fetchPortfolioStatus(),
       supabase
         .from("portfolio_comments")
         .select("id, author_name, body, created_at")
@@ -267,6 +282,7 @@ export function AdminPanel() {
     setMusicTracks(nextMusicTracks);
     setSkills(nextSkills.filter((item) => !item.id.startsWith("default-")));
     setCurrentWork(nextCurrentWork);
+    setPortfolioStatus(nextPortfolioStatus);
 
     if (commentsResult.error) {
       setPanelMessage("Portfolio content loaded, but comments could not be loaded.");
@@ -488,9 +504,28 @@ export function AdminPanel() {
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("portfolio_settings").update(payload).eq("id", 1);
+    const [settingsResult, statusResult] = await Promise.all([
+      supabase.from("portfolio_settings").update(payload).eq("id", 1),
+      supabase.from("portfolio_status").upsert(
+        {
+          id: 1,
+          status_text: portfolioStatus.status_text.trim(),
+          is_enabled: portfolioStatus.is_enabled && Boolean(portfolioStatus.status_text.trim()),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      ),
+    ]);
 
+    const error = settingsResult.error || statusResult.error;
     setPanelMessage(error ? "Portfolio details could not be saved." : "Portfolio details saved.");
+    if (!error) {
+      setPortfolioStatus((current) => ({
+        ...current,
+        status_text: current.status_text.trim(),
+        is_enabled: current.is_enabled && Boolean(current.status_text.trim()),
+      }));
+    }
     setPanelBusy(false);
   }
 
@@ -1289,6 +1324,29 @@ export function AdminPanel() {
               onChange={(event) => setSettings((current) => ({ ...current, role_secondary: event.target.value }))}
               maxLength={120}
             />
+          </label>
+
+          <label className="admin-field-wide">
+            Portfolio status badge
+            <input
+              value={portfolioStatus.status_text}
+              onChange={(event) =>
+                setPortfolioStatus((current) => ({ ...current, status_text: event.target.value.slice(0, 120) }))
+              }
+              maxLength={120}
+              placeholder="Currently working on a new clinical study"
+            />
+          </label>
+
+          <label className="admin-checkbox-label admin-field-wide">
+            <input
+              type="checkbox"
+              checked={portfolioStatus.is_enabled}
+              onChange={(event) =>
+                setPortfolioStatus((current) => ({ ...current, is_enabled: event.target.checked }))
+              }
+            />
+            <span>Show status badge on public portfolio</span>
           </label>
 
           <label className="admin-field-wide">

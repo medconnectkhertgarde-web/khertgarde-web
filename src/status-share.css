@@ -1,0 +1,77 @@
+.portfolio-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  max-width: min(100%, 34rem);
+  margin: 1rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  letter-spacing: 0.035em;
+}
+
+.portfolio-status-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  flex: 0 0 0.48rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0.22rem var(--muted);
+}
+
+.hero-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 1.15rem;
+}
+
+.hero-share-row .button {
+  width: fit-content;
+}
+
+.portfolio-bootstrap {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  gap: 1rem;
+}
+
+.portfolio-bootstrap-line {
+  display: block;
+  height: 0.8rem;
+  max-width: 36rem;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  animation: portfolio-bootstrap-pulse 1.35s ease-in-out infinite alternate;
+}
+
+.portfolio-bootstrap-line:nth-child(1) { width: min(38vw, 13rem); }
+.portfolio-bootstrap-line:nth-child(2) { width: min(74vw, 32rem); height: 2.6rem; }
+.portfolio-bootstrap-line:nth-child(3) { width: min(86vw, 36rem); }
+.portfolio-bootstrap-line:nth-child(4) { width: min(68vw, 27rem); }
+
+.portfolio-load-error {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  color: var(--muted-foreground);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+@keyframes portfolio-bootstrap-pulse {
+  from { opacity: 0.38; }
+  to { opacity: 0.82; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-bootstrap-line { animation: none; opacity: 0.62; }
+}

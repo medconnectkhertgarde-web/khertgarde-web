@@ -4,11 +4,12 @@ import { ArrowDown, Mail, Menu, Moon, Phone, Sun, X } from "lucide-react";
 import { ClinicalStudies } from "@/components/ClinicalStudies";
 import { Comments } from "@/components/Comments";
 import { CurrentWork } from "@/components/CurrentWork";
+import { PortfolioStatusBadge } from "@/components/PortfolioStatusBadge";
+import { ShareButton } from "@/components/ShareButton";
 import { PortfolioRating } from "@/components/PortfolioRating";
 import { ProfileMusic } from "@/components/ProfileMusic";
 import { SkillsGraph } from "@/components/SkillsGraph";
 import {
-  DEFAULT_EXPERIENCES,
   DEFAULT_PORTFOLIO_SETTINGS,
   fetchPortfolioExperiences,
   fetchPortfolioSettings,
@@ -18,6 +19,11 @@ import {
 } from "@/lib/portfolio-content";
 import { fetchPortfolioMusicTracks, type PortfolioMusicTrack } from "@/lib/portfolio-music";
 import { fetchPortfolioSkills, type PortfolioSkill } from "@/lib/portfolio-skills";
+import {
+  EMPTY_PORTFOLIO_STATUS,
+  fetchPortfolioStatus,
+  type PortfolioStatus,
+} from "@/lib/portfolio-status";
 import { updatePortfolioSeo } from "@/lib/seo";
 
 const navItems = [
@@ -172,11 +178,11 @@ function ProfilePhoto({
 
 function Hero({
   settings,
-  settingsResolved,
+  status,
   musicTracks,
 }: {
   settings: PortfolioSettings;
-  settingsResolved: boolean;
+  status: PortfolioStatus;
   musicTracks: PortfolioMusicTrack[];
 }) {
   return (
@@ -191,12 +197,21 @@ function Hero({
             <span>{settings.role_secondary}</span>
           </div>
           <p className="hero-copy">{settings.hero_copy}</p>
+          <PortfolioStatusBadge status={status} />
+          <div className="hero-share-row">
+            <ShareButton
+              title={`${settings.display_name} — Portfolio`}
+              text={settings.role_primary}
+              url="https://khertgarde.vercel.app/"
+              label="Share profile"
+            />
+          </div>
         </div>
 
         <ProfilePhoto
           name={settings.display_name}
           src={settings.profile_image_url}
-          resolved={settingsResolved}
+          resolved
           musicTracks={musicTracks}
         />
       </div>
@@ -303,24 +318,52 @@ function Footer({ settings }: { settings: PortfolioSettings }) {
 }
 
 export function Portfolio() {
-  const [settings, setSettings] = useState<PortfolioSettings>(DEFAULT_PORTFOLIO_SETTINGS);
-  const [experiences, setExperiences] = useState<PortfolioExperience[]>(DEFAULT_EXPERIENCES);
+  const [settings, setSettings] = useState<PortfolioSettings | null>(null);
+  const [experiences, setExperiences] = useState<PortfolioExperience[]>([]);
   const [musicTracks, setMusicTracks] = useState<PortfolioMusicTrack[]>([]);
   const [skills, setSkills] = useState<PortfolioSkill[]>([]);
+  const [status, setStatus] = useState<PortfolioStatus>(EMPTY_PORTFOLIO_STATUS);
   const [skillsResolved, setSkillsResolved] = useState(false);
-  const [settingsResolved, setSettingsResolved] = useState(false);
+  const [coreState, setCoreState] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
     let cancelled = false;
 
-    void Promise.all([fetchPortfolioSettings(), fetchPortfolioExperiences()]).then(
-      ([nextSettings, nextExperiences]) => {
+    async function loadCoreContent() {
+      let [nextSettings, nextExperiences] = await Promise.all([
+        fetchPortfolioSettings(),
+        fetchPortfolioExperiences(),
+      ]);
+
+      // The content helpers intentionally contain bundled fallback copy for older
+      // deployments. Never render that fallback during first load: retry once,
+      // then show a neutral unavailable state instead of flashing stale text.
+      if (nextSettings === DEFAULT_PORTFOLIO_SETTINGS) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
         if (cancelled) return;
-        setSettings(nextSettings);
-        setExperiences(nextExperiences);
-        setSettingsResolved(nextSettings !== DEFAULT_PORTFOLIO_SETTINGS);
-      },
-    );
+        [nextSettings, nextExperiences] = await Promise.all([
+          fetchPortfolioSettings(),
+          fetchPortfolioExperiences(),
+        ]);
+      }
+
+      if (cancelled) return;
+
+      if (nextSettings === DEFAULT_PORTFOLIO_SETTINGS) {
+        setCoreState("error");
+        return;
+      }
+
+      setSettings(nextSettings);
+      setExperiences(nextExperiences.filter((item) => !item.id.startsWith("default-")));
+      setCoreState("ready");
+    }
+
+    void loadCoreContent();
+
+    void fetchPortfolioStatus().then((nextStatus) => {
+      if (!cancelled) setStatus(nextStatus);
+    });
 
     void fetchPortfolioMusicTracks().then((nextMusicTracks) => {
       if (!cancelled) setMusicTracks(nextMusicTracks);
@@ -342,14 +385,33 @@ export function Portfolio() {
   }, []);
 
   useEffect(() => {
-    updatePortfolioSeo(settings);
+    if (settings) updatePortfolioSeo(settings);
   }, [settings]);
+
+  if (coreState === "error") {
+    return (
+      <main className="page-shell portfolio-load-error" role="status">
+        Portfolio content is temporarily unavailable. Please refresh shortly.
+      </main>
+    );
+  }
+
+  if (coreState === "loading" || !settings) {
+    return (
+      <main className="page-shell portfolio-bootstrap" aria-label="Loading portfolio content">
+        <span className="portfolio-bootstrap-line" />
+        <span className="portfolio-bootstrap-line" />
+        <span className="portfolio-bootstrap-line" />
+        <span className="portfolio-bootstrap-line" />
+      </main>
+    );
+  }
 
   return (
     <>
       <Header displayName={settings.display_name} />
       <main className="page-shell">
-        <Hero settings={settings} settingsResolved={settingsResolved} musicTracks={musicTracks} />
+        <Hero settings={settings} status={status} musicTracks={musicTracks} />
         <About settings={settings} />
         <Experience experiences={experiences} />
         <SkillsGraph skills={skills} loading={!skillsResolved} />

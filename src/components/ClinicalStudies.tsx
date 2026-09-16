@@ -7,6 +7,8 @@ import {
   X,
 } from "lucide-react";
 
+import { ShareButton } from "@/components/ShareButton";
+
 export interface ClinicalStudy {
   id: string;
   title: string;
@@ -105,6 +107,13 @@ function StudyCard({ study, onView }: { study: ClinicalStudy; onView: () => void
             Download
           </button>
         )}
+
+        <ShareButton
+          title={study.title}
+          text={study.summary || `${study.category || "Clinical study"} by Khert Laguna Garde`}
+          url={study.view_url}
+          label="Share"
+        />
       </div>
     </article>
   );
@@ -207,6 +216,12 @@ function StudyViewer({ study, onClose }: { study: ClinicalStudy; onClose: () => 
                 Download
               </a>
             ) : null}
+            <ShareButton
+              title={study.title}
+              text={study.summary || `${study.category || "Clinical study"} by Khert Laguna Garde`}
+              url={study.view_url}
+              label="Share"
+            />
             <button
               ref={closeButtonRef}
               className="icon-button"
